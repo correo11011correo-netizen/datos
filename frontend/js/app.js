@@ -163,7 +163,7 @@ function renderTable(data, headId, bodyId) {
     head.innerHTML = '';
     body.innerHTML = '';
 
-    if (!data || data.length === 0) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
         body.innerHTML = '<tr><td colspan="1" style="text-align:center">No hay datos disponibles</td></tr>';
         return;
     }
