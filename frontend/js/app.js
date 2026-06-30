@@ -193,9 +193,9 @@ async function viewUserData(entity) {
         const res = await apiRequest(`/exec?cmd=query_entity`, 'POST', { entity });
         document.getElementById('user-data-viewer').classList.remove('hidden');
         document.getElementById('user-entity-title').querySelector('span').innerText = entity;
-        renderTable(res, 'user-table-head', 'user-table-body');
+        renderTable(res.result, 'user-table-head', 'user-table-body');
     } catch (e) {
-        notify(`Error cargando ${entity}`, 'error');
+        notify(`Error cargando ${entity}: ${e.message}`, 'error');
     }
 }
 
