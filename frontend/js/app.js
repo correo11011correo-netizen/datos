@@ -75,7 +75,6 @@ async function handleLogin() {
     if (!token) return notify('Por favor, ingrese el token', 'error');
     try {
         session.saveToken(token);
-        await apiRequest('/exec?cmd=init_system', 'POST', {});
         switchView('admin');
         tokenInput.value = '';
         notify('Bienvenido al Command Center', 'success');
