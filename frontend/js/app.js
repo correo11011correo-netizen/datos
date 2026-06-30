@@ -42,14 +42,29 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         headers: { 'Content-Type': 'application/json', 'x-admin-token': token }
     };
     if (body) options.body = JSON.stringify(body);
+    
     const response = await fetch(`${API_URL}${endpoint}`, options);
+    
     if (!response.ok) {
-        if (response.status === 403) {
+        // 403 o 422 (cuando falta el token) se tratan como sesión inválida
+        if (response.status === 403 || response.status === 422) {
             handleLogout();
             throw new Error('Sesión expirada o token inválido');
         }
-        const err = await response.json();
-        throw new Error(err.detail || 'Error en la petición');
+        
+        let errorMessage = 'Error en la petición';
+        try {
+            const err = await response.json();
+            if (typeof err.detail === 'string') {
+                errorMessage = err.detail;
+            } else if (Array.isArray(err.detail) && err.detail.length > 0) {
+                // Extraer el mensaje del primer error de validación de FastAPI
+                errorMessage = err.detail[0].msg || 'Error de validación de datos';
+            }
+        } catch (e) {
+            errorMessage = `Error del servidor (${response.status})`;
+        }
+        throw new Error(errorMessage);
     }
     return response.json();
 }
