@@ -1,0 +1,86 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1a1a1a;
+    color: #eee;
+    margin: 0;
+    padding: 0;
+}
+
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+}
+
+section {
+    background: #252525;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+h2 {
+    margin-top: 0;
+    color: #00d4ff;
+}
+
+.btn-group, .input-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+input {
+    background: #333;
+    border: 1px solid #444;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: opacity 0.2s;
+}
+
+.btn:hover { opacity: 0.8; }
+.btn-primary { background: #007bff; color: white; }
+.btn-success { background: #28a745; color: white; }
+.btn-danger { background: #dc3545; color: white; }
+
+#data-table-container {
+    margin-top: 20px;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #333;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border: 1px solid #444;
+}
+
+th {
+    background: #444;
+    color: #00d4ff;
+}

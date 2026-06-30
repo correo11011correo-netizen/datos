@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB-Sentinel Admin</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <nav>
+            <h1>🛡️ DB-Sentinel Admin</h1>
+            <div id="user-info">Admin Mode</div>
+        </nav>
+
+        <main>
+            <section id="controls">
+                <h2>Comandos Globales</h2>
+                <div class="btn-group">
+                    <button onclick="runCmd('init_system')" class="btn btn-primary">Init System</button>
+                    <button onclick="runCmd('format_all')" class="btn btn-danger">Format All</button>
+                </div>
+            </section>
+
+            <section id="entity-manager">
+                <h2>Gestor de Entidades</h2>
+                <div class="input-group">
+                    <input type="text" id="entity-name" placeholder="Nombre de Entidad (ej: clientes)">
+                    <button onclick="createEntity()" class="btn btn-success">Crear Entidad</button>
+                </div>
+            </section>
+
+            <section id="data-viewer">
+                <h2>Explorador de Datos</h2>
+                <div class="input-group">
+                    <input type="text" id="view-entity" placeholder="Entidad a visualizar">
+                    <button onclick="viewData()" class="btn btn-primary">Ver Datos</button>
+                </div>
+                <div id="data-table-container">
+                    <table id="data-table">
+                        <thead><tr id="table-head"></tr></thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="js/app.js"></script>
+</body>
+</html>
