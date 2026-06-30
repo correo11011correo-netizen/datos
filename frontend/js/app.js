@@ -202,16 +202,6 @@ function closeUserViewer() {
     document.getElementById('user-data-viewer').classList.add('hidden');
 }
 
-const originalViewData = viewData;
-window.viewData = (entity) => {
-    const activeMod = document.querySelector('.module:not(.hidden)')?.id;
-    if (activeMod === 'mod-users') {
-        viewUserData(entity);
-    } else {
-        originalViewData(entity);
-    }
-};
-
 async function runCmd(cmd) {
     try {
         const res = await apiRequest(`/exec?cmd=${cmd}`, 'POST', {});
