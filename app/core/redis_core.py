@@ -1,4 +1,4 @@
-import redis
+import redis  # type: ignore
 
 from app.core.config import settings
 

@@ -6,6 +6,22 @@ const session = {
     clearToken: () => localStorage.removeItem('db_sentinel_token')
 };
 
+// SISTEMA DE NOTIFICACIONES (TOASTS)
+function notify(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerText = message;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 function switchView(view) {
     const loginScreen = document.getElementById('login-screen');
     const adminDashboard = document.getElementById('admin-dashboard');
@@ -41,21 +57,23 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 async function handleLogin() {
     const tokenInput = document.getElementById('admin-token');
     const token = tokenInput.value;
-    if (!token) return alert('Por favor, ingrese el token');
+    if (!token) return notify('Por favor, ingrese el token', 'error');
     try {
         session.saveToken(token);
         await apiRequest('/exec?cmd=init_system', 'POST', {});
         switchView('admin');
         tokenInput.value = '';
+        notify('Bienvenido al Command Center', 'success');
     } catch (e) {
         session.clearToken();
-        alert(`Acceso Denegado: ${e.message}`);
+        notify(`Acceso Denegado: ${e.message}`, 'error');
     }
 }
 
 function handleLogout() {
     session.clearToken();
     switchView('login');
+    notify('Sesión cerrada correctamente', 'info');
 }
 
 function showModule(moduleId) {
@@ -71,46 +89,55 @@ function showModule(moduleId) {
 async function loadEntities() {
     try {
         const res = await apiRequest('/exec?cmd=list_entities', 'POST', {});
-        const grid = document.getElementById('entity-grid');
-        grid.innerHTML = '';
+        const list = document.getElementById('entity-list');
+        list.innerHTML = '';
         
         res.forEach(ent => {
-            const card = document.createElement('div');
-            card.className = 'entity-card';
-            card.innerHTML = `<h4>${ent.name}</h4>`;
-            card.onclick = () => viewData(ent.name);
-            grid.appendChild(card);
+            const item = document.createElement('div');
+            item.className = 'entity-item';
+            item.innerHTML = `<span>📂</span> <span>${ent.name}</span>`;
+            item.onclick = () => selectEntity(ent.name, item);
+            list.appendChild(item);
         });
     } catch (e) {
-        console.error('Error loading entities:', e);
+        notify('Error cargando entidades', 'error');
+    }
+}
+
+async function selectEntity(name, element) {
+    // UI: Marcar como activo
+    document.querySelectorAll('.entity-item').forEach(i => i.classList.remove('active'));
+    element.classList.add('active');
+
+    // UI: Drill-down en móvil
+    if (window.innerWidth < 768) {
+        document.querySelector('.explorer-sidebar').classList.add('hidden');
+    }
+
+    // UI: Cambiar vista de vacío a datos
+    document.getElementById('empty-state').classList.add('hidden');
+    const viewer = document.getElementById('data-viewer');
+    viewer.classList.remove('hidden');
+    document.getElementById('current-entity-title').querySelector('span').innerText = name;
+
+    try {
+        const res = await apiRequest(`/exec?cmd=query_entity`, 'POST', { entity: name });
+        renderTable(res, 'table-head', 'table-body');
+    } catch (e) {
+        notify(`Error al cargar datos de ${name}`, 'error');
     }
 }
 
 async function createEntity() {
     const name = document.getElementById('entity-name').value;
-    if (!name) return alert('Escribe el nombre de la entidad');
+    if (!name) return notify('Escribe el nombre de la plataforma', 'error');
     try {
         await apiRequest(`/exec?cmd=create_entity`, 'POST', { name });
-        alert('Entidad creada');
+        notify(`Plataforma ${name} creada`, 'success');
         document.getElementById('entity-name').value = '';
         loadEntities();
     } catch (e) {
-        alert(`Error: ${e.message}`);
-    }
-}
-
-async function viewData(entityName) {
-    try {
-        const res = await apiRequest(`/exec?cmd=query_entity`, 'POST', { entity: entityName });
-        
-        // Mostrar visor
-        const viewer = document.getElementById('data-viewer');
-        viewer.classList.remove('hidden');
-        document.getElementById('current-entity-title').querySelector('span').innerText = entityName;
-        
-        renderTable(res, 'table-head', 'table-body');
-    } catch (e) {
-        alert(`Error: ${e.message}`);
+        notify(`Error: ${e.message}`, 'error');
     }
 }
 
@@ -121,7 +148,7 @@ function renderTable(data, headId, bodyId) {
     body.innerHTML = '';
 
     if (!data || data.length === 0) {
-        body.innerHTML = '<tr><td colspan="1" style="text-align:center">No hay datos</td></tr>';
+        body.innerHTML = '<tr><td colspan="1" style="text-align:center">No hay datos disponibles</td></tr>';
         return;
     }
 
@@ -137,10 +164,14 @@ function renderTable(data, headId, bodyId) {
 }
 
 function closeViewer() {
+    // UI: Volver atrás en drill-down móvil
+    if (window.innerWidth < 768) {
+        document.querySelector('.explorer-sidebar').classList.remove('hidden');
+    }
     document.getElementById('data-viewer').classList.add('hidden');
+    document.getElementById('empty-state').classList.remove('hidden');
 }
 
-// Funciones para el módulo de usuarios
 async function viewUserData(entity) {
     try {
         const res = await apiRequest(`/exec?cmd=query_entity`, 'POST', { entity });
@@ -148,7 +179,7 @@ async function viewUserData(entity) {
         document.getElementById('user-entity-title').querySelector('span').innerText = entity;
         renderTable(res, 'user-table-head', 'user-table-body');
     } catch (e) {
-        alert(`Error: ${e.message}`);
+        notify(`Error cargando ${entity}`, 'error');
     }
 }
 
@@ -156,10 +187,9 @@ function closeUserViewer() {
     document.getElementById('user-data-viewer').classList.add('hidden');
 }
 
-// Sobrescribir viewData original para manejar el contexto de usuarios si es necesario
 const originalViewData = viewData;
-window.viewData = (entity) => {
-    const activeMod = document.querySelector('.module:not(.hidden)').id;
+window/viewData = (entity) => {
+    const activeMod = document.querySelector('.module:not(.hidden)')?.id;
     if (activeMod === 'mod-users') {
         viewUserData(entity);
     } else {
@@ -170,10 +200,10 @@ window.viewData = (entity) => {
 async function runCmd(cmd) {
     try {
         const res = await apiRequest(`/exec?cmd=${cmd}`, 'POST', {});
-        alert(`Resultado: ${res.result}`);
+        notify(res.result, 'success');
         if (cmd === 'init_system' || cmd === 'format_all') loadEntities();
     } catch (e) {
-        alert(`Error: ${e.message}`);
+        notify(`Error: ${e.message}`, 'error');
     }
 }
 

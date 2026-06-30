@@ -2,11 +2,14 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DB-Sentinel | Command Center</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- CONTENEDOR DE TOASTS -->
+    <div id="toast-container"></div>
+
     <div id="app">
         <!-- PANTALLA DE LOGIN -->
         <div id="login-screen" class="screen">
@@ -29,20 +32,19 @@
         <!-- DASHBOARD DE ADMINISTRACIÓN -->
         <div id="admin-dashboard" class="screen hidden">
             <div class="dashboard-container">
+                <!-- SIDEBAR (Solo visible en PC) -->
                 <aside class="sidebar">
                     <div class="sidebar-header">
                         <span class="logo">🛡️</span>
                         <h2>Sentinel</h2>
                     </div>
-                    
                     <nav class="sidebar-nav">
                         <div class="nav-section">
                             <span class="nav-label">SISTEMA</span>
                             <button onclick="showModule('infra')" class="nav-item active" id="nav-infra">🛠️ Infraestructura</button>
-                            <button onclick="showModule('entities')" class="nav-item" id="nav-entities">📦 Entidades/Plataformas</button>
+                            <button onclick="showModule('entities')" class="nav-item" id="nav-entities">📦 Gestor de Datos</button>
                             <button onclick="showModule('users')" class="nav-item" id="nav-users">👥 Usuarios y Roles</button>
                         </div>
-                        
                         <div class="nav-section">
                             <span class="nav-label">SOPORTE</span>
                             <button onclick="handleLogout()" class="nav-item btn-logout">🚪 Salir</button>
@@ -50,57 +52,69 @@
                     </nav>
                 </aside>
 
+                <!-- CONTENIDO PRINCIPAL -->
                 <main class="main-content">
                     <!-- MÓDULO INFRAESTRUCTURA -->
                     <div id="mod-infra" class="module">
                         <header class="mod-header">
-                            <h1>Gestión de Infraestructura</h1>
-                            <p>Comandos críticos de control sobre PostgreSQL y Redis</p>
+                            <h1>Infraestructura</h1>
+                            <p>Control de PostgreSQL y Redis</p>
                         </header>
                         <div class="infra-grid">
                             <div class="infra-card">
                                 <h3>Inicializar Sistema</h3>
-                                <p>Limpia la base y carga la configuración base de admin y roles.</p>
+                                <p>Limpia la base y carga la configuración base.</p>
                                 <button onclick="runCmd('init_system')" class="btn btn-primary">Ejecutar Init</button>
                             </div>
                             <div class="infra-card danger">
                                 <h3>Formateo Total</h3>
-                                <p>Borra ABSOLUTAMENTE TODO en la DB y Redis. Acción irreversible.</p>
+                                <p>Borra absolutamente todo. Acción irreversible.</p>
                                 <button onclick="runCmd('format_all')" class="btn btn-danger">Formatear Todo</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- MÓDULO ENTIDADES/PLATAFORMAS -->
+                    <!-- MÓDULO GESTOR DE DATOS (RESPONSIVE EXPLORER) -->
                     <div id="mod-entities" class="module hidden">
                         <header class="mod-header">
-                            <h1>Entidades y Plataformas</h1>
-                            <p>Administra los esquemas de datos de tus SaaS</p>
+                            <h1>Explorador de Datos</h1>
+                            <p>Administra tus plataformas y JSONB</p>
                         </header>
-                        
-                        <div class="entity-controls">
-                            <div class="input-group">
-                                <input type="text" id="entity-name" placeholder="Nombre de la plataforma/entidad...">
-                                <button onclick="createEntity()" class="btn btn-success">Crear Nueva Entidad</button>
-                            </div>
-                        </div>
 
-                        <div class="entity-list-container">
-                            <div id="entity-grid" class="entity-grid">
-                                <!-- Cargado dinámicamente -->
+                        <div class="explorer-container">
+                            <div class="explorer-sidebar">
+                                <div class="explorer-controls">
+                                    <input type="text" id="entity-name" placeholder="Nueva plataforma...">
+                                    <button onclick="createEntity()" class="btn btn-success">+</button>
+                                </div>
+                                <div id="entity-list" class="entity-list">
+                                    <!-- Cargado dinámicamente -->
+                                </div>
                             </div>
-                        </div>
 
-                        <div id="data-viewer" class="data-viewer hidden">
-                            <div class="viewer-header">
-                                <h3 id="current-entity-title">Datos de: <span>-</span></h3>
-                                <button onclick="closeViewer()" class="btn btn-outline">Cerrar</button>
-                            </div>
-                            <div id="data-table-container">
-                                <table id="data-table">
-                                    <thead><tr id="table-head"></tr></thead>
-                                    <tbody id="table-body"></tbody>
-                                </table>
+                            <div class="explorer-main">
+                                <div id="empty-state" class="empty-state">
+                                    <div class="empty-icon">📂</div>
+                                    <h3>Sin selección</h3>
+                                    <p>Elige una plataforma para ver sus datos</p>
+                                </div>
+                                <div id="data-viewer" class="data-viewer hidden">
+                                    <div class="viewer-header">
+                                        <div class="viewer-title">
+                                            <button onclick="closeViewer()" class="btn-back">←</button>
+                                            <h3 id="current-entity-title"><span>-</span></h3>
+                                        </div>
+                                        <div class="viewer-actions">
+                                            <button onclick="closeViewer()" class="btn btn-outline hide-mobile">Cerrar</button>
+                                        </div>
+                                    </div>
+                                    <div id="data-table-container">
+                                        <table id="data-table">
+                                            <thead><tr id="table-head"></tr></thead>
+                                            <tbody id="table-body"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -108,24 +122,26 @@
                     <!-- MÓDULO USUARIOS -->
                     <div id="mod-users" class="module hidden">
                         <header class="mod-header">
-                            <h1>Gestión de Usuarios y Roles</h1>
-                            <p>Control de acceso al motor de administración</p>
+                            <h1>Usuarios y Roles</h1>
+                            <p>Control de acceso al motor</p>
                         </header>
                         <div class="users-grid">
                             <div class="user-section">
                                 <h3>Administradores</h3>
-                                <button onclick="viewData('admins')" class="btn btn-primary">Listar Administradores</button>
+                                <button onclick="viewData('admins')" class="btn btn-primary">Listar Admins</button>
                             </div>
                             <div class="user-section">
                                 <h3>Roles del Sistema</h3>
                                 <button onclick="viewData('roles')" class="btn btn-primary">Listar Roles</button>
                             </div>
                         </div>
-                        <!-- El visor de datos se reutiliza aquí también -->
                         <div id="user-data-viewer" class="data-viewer hidden">
                             <div class="viewer-header">
-                                <h3 id="user-entity-title">Datos de: <span>-</span></h3>
-                                <button onclick="closeUserViewer()" class="btn btn-outline">Cerrar</button>
+                                <div class="viewer-title">
+                                    <button onclick="closeUserViewer()" class="btn-back">←</button>
+                                    <h3 id="user-entity-title"><span>-</span></h3>
+                                </div>
+                                <button onclick="closeUserViewer()" class="btn btn-outline hide-mobile">Cerrar</button>
                             </div>
                             <div id="user-data-table-container">
                                 <table id="user-data-table">
@@ -136,6 +152,26 @@
                         </div>
                     </div>
                 </main>
+
+                <!-- BOTTOM NAVIGATION (Solo móvil) -->
+                <nav class="bottom-nav">
+                    <button onclick="showModule('infra')" class="nav-item-mobile active" id="mob-nav-infra">
+                        <span class="icon">🛠️</span>
+                        <span class="label">Infra</span>
+                    </button>
+                    <button onclick="showModule('entities')" class="nav-item-mobile" id="mob-nav-entities">
+                        <span class="icon">📦</span>
+                        <span class="label">Datos</span>
+                    </button>
+                    <button onclick="showModule('users')" class="nav-item-mobile" id="mob-nav-users">
+                        <span class="icon">👥</span>
+                        <span class="label">Usuarios</span>
+                    </button>
+                    <button onclick="handleLogout()" class="nav-item-mobile btn-logout">
+                        <span class="icon">🚪</span>
+                        <span class="label">Salir</span>
+                    </button>
+                </nav>
             </div>
         </div>
     </div>

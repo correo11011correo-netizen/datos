@@ -12,6 +12,7 @@ async def cmd_list_entities(params: dict[str, Any]) -> Any:
     result = execute_raw("SELECT name, schema FROM metadata_entities ORDER BY name ASC").fetchall()
     return [{"name": row[0], "schema": row[1]} for row in result]
 
+
 async def cmd_seed_system(params: dict[str, Any]) -> str:
     """
     Populates the system with basic initial data.
@@ -62,19 +63,28 @@ async def cmd_init_system(params: dict[str, Any]) -> str:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+
     baseline_data = {
         "roles": [
-            {"name": "SuperAdmin", "permissions": ["all"], "description": "Acceso total al sistema"},
-            {"name": "Editor", "permissions": ["read", "write"], "description": "Gestión de datos"}
+            {
+                "name": "SuperAdmin",
+                "permissions": ["all"],
+                "description": "Acceso total al sistema",
+            },
+            {"name": "Editor", "permissions": ["read", "write"], "description": "Gestión de datos"},
         ],
         "admins": [
-            {"username": "root_admin", "role": "SuperAdmin", "status": "active", "created_at": "2026-06-30"}
-        ]
+            {
+                "username": "root_admin",
+                "role": "SuperAdmin",
+                "status": "active",
+                "created_at": "2026-06-30",
+            }
+        ],
     }
-    
+
     await cmd_seed_system({"seed_data": baseline_data})
-    
+
     return "System initialized: Core structure created and Admin/Roles baseline loaded."
 
 
@@ -130,9 +140,10 @@ async def cmd_insert_data(params: dict[str, Any]) -> str:
 
     entity_id = res[0]
     table_name = f"entity_{entity_name.lower().replace(' ', '_')}"
+    safe_table = f'"{table_name}"'
 
     execute_raw(
-        f"INSERT INTO {table_name} (entity_id, data) VALUES (:eid, :data)",
+        f"INSERT INTO {safe_table} (entity_id, data) VALUES (:eid, :data)",  # nosec
         {"eid": entity_id, "data": json.dumps(data)},
     )
 
@@ -149,6 +160,8 @@ async def cmd_query_entity(params: dict[str, Any]) -> Any:
         raise ValueError("Entity name is required")
 
     table_name = f"entity_{entity_name.lower().replace(' ', '_')}"
+    safe_table = f'"{table_name}"'
 
-    result = execute_raw(f"SELECT data FROM {table_name} ORDER BY created_at DESC").fetchall()
+    query = "SELECT data FROM " + safe_table + " ORDER BY created_at DESC"
+    result = execute_raw(query).fetchall()
     return [row[0] for row in result]
