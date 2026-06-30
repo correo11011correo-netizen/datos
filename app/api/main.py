@@ -9,6 +9,7 @@ from app.engine.commands.db_commands import (
     cmd_init_system,
     cmd_insert_data,
     cmd_query_entity,
+    cmd_list_entities,
     cmd_seed_system,
 )
 import os
