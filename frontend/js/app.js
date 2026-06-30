@@ -114,7 +114,7 @@ async function loadEntities() {
             list.appendChild(item);
         });
     } catch (e) {
-        notify('Error cargando entidades', 'error');
+        notify(`Error cargando entidades: ${e.message}`, 'error');
     }
 }
 
@@ -138,7 +138,7 @@ async function selectEntity(name, element) {
         const res = await apiRequest(`/exec?cmd=query_entity`, 'POST', { entity: name });
         renderTable(res, 'table-head', 'table-body');
     } catch (e) {
-        notify(`Error al cargar datos de ${name}`, 'error');
+        notify(`Error al cargar datos de ${name}: ${e.message}`, 'error');
     }
 }
 
@@ -151,7 +151,7 @@ async function createEntity() {
         document.getElementById('entity-name').value = '';
         loadEntities();
     } catch (e) {
-        notify(`Error: ${e.message}`, 'error');
+        notify(`Error al crear entidad: ${e.message}`, 'error');
     }
 }
 
