@@ -106,13 +106,15 @@ async function loadEntities() {
         const list = document.getElementById('entity-list');
         list.innerHTML = '';
         
-        res.forEach(ent => {
-            const item = document.createElement('div');
-            item.className = 'entity-item';
-            item.innerHTML = `<span>📂</span> <span>${ent.name}</span>`;
-            item.onclick = () => selectEntity(ent.name, item);
-            list.appendChild(item);
-        });
+        if (res && res.result) {
+            res.result.forEach(ent => {
+                const item = document.createElement('div');
+                item.className = 'entity-item';
+                item.innerHTML = `<span>📂</span> <span>${ent.name}</span>`;
+                item.onclick = () => selectEntity(ent.name, item);
+                list.appendChild(item);
+            });
+        }
     } catch (e) {
         notify(`Error cargando entidades: ${e.message}`, 'error');
     }
