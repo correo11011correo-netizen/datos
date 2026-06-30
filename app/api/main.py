@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.dispatcher import dispatcher
 from app.engine.commands.db_commands import (
@@ -10,6 +11,7 @@ from app.engine.commands.db_commands import (
     cmd_query_entity,
     cmd_seed_system,
 )
+import os
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -21,20 +23,31 @@ dispatcher.register("insert_data", cmd_insert_data)
 dispatcher.register("query_entity", cmd_query_entity)
 dispatcher.register("seed_system", cmd_seed_system)
 
+# Serve static files from the 'frontend' directory
+# We mount it at /static to avoid conflicts with API routes
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 async def verify_admin(x_admin_token: str = Header(...)):
     if x_admin_token != settings.ADMIN_SECRET_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid Admin Token")
     return True
 
-
 @app.get("/")
-async def root():
+async def serve_index():
+    """Serves the Admin Portal HTML page."""
+    return FileResponse("frontend/index.html")
+
+@app.get("/api/status")
+async def status():
+    """Health check endpoint for the API."""
     return {"status": "online", "engine": settings.APP_NAME}
 
-
 @app.post("/exec")
-async def execute_command(request: Request, cmd: str, admin: bool = Depends(verify_admin)):
+async def execute_command(
+    request: Request, 
+    cmd: str, 
+    admin: bool = Depends(verify_admin)
+):
     try:
         params = await request.json() if request.body() else {}
         result = await dispatcher.dispatch(cmd, params)
@@ -44,8 +57,7 @@ async def execute_command(request: Request, cmd: str, admin: bool = Depends(veri
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Engine Error: {str(e)}") from e
 
-
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
