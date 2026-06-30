@@ -51,7 +51,16 @@ async def status():
 @app.post("/exec")
 async def execute_command(request: Request, cmd: str, admin: bool = Depends(verify_admin)):
     try:
-        params = await request.json() if request.body() else {}
+        # Manejo seguro de body vacío para evitar "Expecting value: line 1 column 1"
+        body = await request.body()
+        params = {}
+        if body:
+            try:
+                import json
+                params = json.loads(body)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON body")
+        
         result = await dispatcher.dispatch(cmd, params)
         return {"status": "success", "result": result}
     except ValueError as e:
