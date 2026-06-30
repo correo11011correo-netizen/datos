@@ -26,9 +26,8 @@ async def cmd_seed_system(params: dict[str, Any]) -> str:
 
 async def cmd_format_all(params: dict[str, Any]) -> str:
     """
-    NUCLEAR COMMAND: Formats both PostgreSQL and Redis.
+    NUCLEAR COMMAND: Total wipe of PostgreSQL public schema and Redis.
     """
-    # Drop all tables in public schema
     execute_raw("""
         DO $$ DECLARE
             r RECORD;
@@ -39,15 +38,14 @@ async def cmd_format_all(params: dict[str, Any]) -> str:
         END $$;
     """)
 
-    # Clear Redis
     clear_cache()
 
-    return "System fully formatted. All data erased."
+    return "System fully formatted. All data and structures erased."
 
 
 async def cmd_init_system(params: dict[str, Any]) -> str:
     """
-    Initializes the generic structure.
+    Initializes the generic structure and seeds the baseline admin configuration.
     """
     execute_raw("""
         CREATE TABLE IF NOT EXISTS metadata_entities (
@@ -57,7 +55,20 @@ async def cmd_init_system(params: dict[str, Any]) -> str:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    return "Generic system initialized. Metadata table ready."
+    
+    baseline_data = {
+        "roles": [
+            {"name": "SuperAdmin", "permissions": ["all"], "description": "Acceso total al sistema"},
+            {"name": "Editor", "permissions": ["read", "write"], "description": "Gestión de datos"}
+        ],
+        "admins": [
+            {"username": "root_admin", "role": "SuperAdmin", "status": "active", "created_at": "2026-06-30"}
+        ]
+    }
+    
+    await cmd_seed_system({"seed_data": baseline_data})
+    
+    return "System initialized: Core structure created and Admin/Roles baseline loaded."
 
 
 async def cmd_create_entity(params: dict[str, Any]) -> str:
