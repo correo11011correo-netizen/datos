@@ -1,24 +1,75 @@
 const API_URL = 'http://localhost:8000';
-const ADMIN_TOKEN = 'super-secret-admin-token';
+
+// Gestión de Sesión
+const session = {
+    saveToken: (token) => localStorage.setItem('db_sentinel_token', token),
+    getToken: () => localStorage.getItem('db_sentinel_token'),
+    clearToken: () => localStorage.removeItem('db_sentinel_token')
+};
+
+// Cambio de vistas
+function switchView(view) {
+    const loginScreen = document.getElementById('login-screen');
+    const adminDashboard = document.getElementById('admin-dashboard');
+    
+    if (view === 'admin') {
+        loginScreen.classList.add('hidden');
+        adminDashboard.classList.remove('hidden');
+    } else {
+        loginScreen.classList.remove('hidden');
+        adminDashboard.classList.add('hidden');
+    }
+}
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
+    const token = session.getToken();
     const options = {
         method,
         headers: {
             'Content-Type': 'application/json',
-            'x-admin-token': ADMIN_TOKEN
+            'x-admin-token': token
         }
     };
     if (body) options.body = JSON.stringify(body);
     
     const response = await fetch(`${API_URL}${endpoint}`, options);
     if (!response.ok) {
+        if (response.status === 403) {
+            handleLogout();
+            throw new Error('Sesión expirada o token inválido');
+        }
         const err = await response.json();
         throw new Error(err.detail || 'Error en la petición');
     }
     return response.json();
 }
 
+async function handleLogin() {
+    const tokenInput = document.getElementById('admin-token');
+    const token = tokenInput.value;
+    
+    if (!token) return alert('Por favor, ingrese el token');
+
+    try {
+        // Verificación rápida usando la raíz de la API
+        // El endpoint / requiere el token via verify_admin si lo configuramos, 
+        // pero para simplificar, intentaremos un comando simple.
+        await apiRequest('/exec?cmd=init_system', 'POST', {});
+        
+        session.saveToken(token);
+        switchView('admin');
+        tokenInput.value = '';
+    } catch (e) {
+        alert(`Acceso Denegado: ${e.message}`);
+    }
+}
+
+function handleLogout() {
+    session.clearToken();
+    switchView('login');
+}
+
+// Comandos del Panel
 async function runCmd(cmd) {
     try {
         const res = await apiRequest(`/exec?cmd=${cmd}`, 'POST');
@@ -34,6 +85,7 @@ async function createEntity() {
     try {
         const res = await apiRequest(`/exec?cmd=create_entity`, 'POST', { name });
         alert(res.result);
+        document.getElementById('entity-name').value = '';
     } catch (e) {
         alert(`Error: ${e.message}`);
     }
@@ -57,11 +109,10 @@ function renderTable(data) {
     body.innerHTML = '';
 
     if (!data || data.length === 0) {
-        body.innerHTML = '<tr><td colspan="1">No hay datos</td></tr>';
+        body.innerHTML = '<tr><td colspan="1" style="text-align:center">No hay datos disponibles</td></tr>';
         return;
     }
 
-    // Extract keys from first item for headers
     const keys = Object.keys(data[0]);
     keys.forEach(k => head.innerHTML += `<th>${k}</th>`);
 
@@ -72,3 +123,10 @@ function renderTable(data) {
         body.innerHTML += tr;
     });
 }
+
+// Inicialización al cargar la página
+window.onload = () => {
+    if (session.getToken()) {
+        switchView('admin');
+    }
+};

@@ -2,48 +2,75 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DB-Sentinel Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1/s">
+    <title>DB-Sentinel | Admin Portal</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="app">
-        <nav>
-            <h1>🛡️ DB-Sentinel Admin</h1>
-            <div id="user-info">Admin Mode</div>
-        </nav>
+        <!-- PANTALLA DE LOGIN -->
+        <div id="login-screen" class="screen">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo">🛡️</div>
+                    <h1>DB-Sentinel</h1>
+                    <p>Acceso Restringido al Motor de DB</p>
+                </div>
+                <div class="login-body">
+                    <div class="input-group">
+                        <label for="admin-token">Token de Administración</label>
+                        <input type="password" id="admin-token" placeholder="Ingrese su token secreto...">
+                    </div>
+                    <button onclick="handleLogin()" class="btn btn-primary btn-block">Entrar al Sistema</button>
+                </div>
+            </div>
+        </div>
 
-        <main>
-            <section id="controls">
-                <h2>Comandos Globales</h2>
-                <div class="btn-group">
-                    <button onclick="runCmd('init_system')" class="btn btn-primary">Init System</button>
-                    <button onclick="runCmd('format_all')" class="btn btn-danger">Format All</button>
+        <!-- PANEL DE ADMINISTRACIÓN (Oculto por defecto) -->
+        <div id="admin-dashboard" class="screen hidden">
+            <nav>
+                <div class="nav-left">
+                    <span class="logo">🛡️</span>
+                    <h1>DB-Sentinel Admin</h1>
                 </div>
-            </section>
+                <div class="nav-right">
+                    <span id="user-badge">SuperAdmin</span>
+                    <button onclick="handleLogout()" class="btn btn-outline">Cerrar Sesión</button>
+                </div>
+            </nav>
 
-            <section id="entity-manager">
-                <h2>Gestor de Entidades</h2>
-                <div class="input-group">
-                    <input type="text" id="entity-name" placeholder="Nombre de Entidad (ej: clientes)">
-                    <button onclick="createEntity()" class="btn btn-success">Crear Entidad</button>
-                </div>
-            </section>
+            <main>
+                <section id="controls">
+                    <h2>Comandos Globales</h2>
+                    <div class="btn-group">
+                        <button onclick="runCmd('init_system')" class="btn btn-primary">Init System</button>
+                        <button onclick="runCmd('format_all')" class="btn btn-danger">Format All</button>
+                    </div>
+                </section>
 
-            <section id="data-viewer">
-                <h2>Explorador de Datos</h2>
-                <div class="input-group">
-                    <input type="text" id="view-entity" placeholder="Entidad a visualizar">
-                    <button onclick="viewData()" class="btn btn-primary">Ver Datos</button>
-                </div>
-                <div id="data-table-container">
-                    <table id="data-table">
-                        <thead><tr id="table-head"></tr></thead>
-                        <tbody id="table-body"></tbody>
-                    </table>
-                </div>
-            </section>
-        </main>
+                <section id="entity-manager">
+                    <h2>Gestor de Entidades</h2>
+                    <div class="input-group">
+                        <input type="text" id="entity-name" placeholder="Nombre de Entidad (ej: clientes)">
+                        <button onclick="createEntity()" class="btn btn-success">Crear Entidad</button>
+                    </div>
+                </section>
+
+                <section id="data-viewer">
+                    <h2>Explorador de Datos</h2>
+                    <div class="input-group">
+                        <input type="text" id="view-entity" placeholder="Entidad a visualizar">
+                        <button onclick="viewData()" class="btn btn-primary">Ver Datos</button>
+                    </div>
+                    <div id="data-table-container">
+                        <table id="data-table">
+                            <thead><tr id="table-head"></tr></thead>
+                            <tbody id="table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+        </div>
     </div>
     <script src="js/app.js"></script>
 </body>
