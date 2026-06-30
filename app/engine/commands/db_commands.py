@@ -5,6 +5,13 @@ from app.core.db import execute_raw
 from app.core.redis_core import clear_cache
 
 
+async def cmd_list_entities(params: dict[str, Any]) -> Any:
+    """
+    Returns a list of all registered entities and their schemas.
+    """
+    result = execute_raw("SELECT name, schema FROM metadata_entities ORDER BY name ASC").fetchall()
+    return [{"name": row[0], "schema": row[1]} for row in result]
+
 async def cmd_seed_system(params: dict[str, Any]) -> str:
     """
     Populates the system with basic initial data.

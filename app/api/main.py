@@ -22,6 +22,7 @@ dispatcher.register("create_entity", cmd_create_entity)
 dispatcher.register("insert_data", cmd_insert_data)
 dispatcher.register("query_entity", cmd_query_entity)
 dispatcher.register("seed_system", cmd_seed_system)
+dispatcher.register("list_entities", cmd_list_entities)
 
 # Serve static files from the 'frontend' directory
 # We mount it at /static to avoid conflicts with API routes

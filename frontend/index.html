@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1/s">
-    <title>DB-Sentinel | Admin Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB-Sentinel | Command Center</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -26,50 +26,117 @@
             </div>
         </div>
 
-        <!-- PANEL DE ADMINISTRACIÓN (Oculto por defecto) -->
+        <!-- DASHBOARD DE ADMINISTRACIÓN -->
         <div id="admin-dashboard" class="screen hidden">
-            <nav>
-                <div class="nav-left">
-                    <span class="logo">🛡️</span>
-                    <h1>DB-Sentinel Admin</h1>
-                </div>
-                <div class="nav-right">
-                    <span id="user-badge">SuperAdmin</span>
-                    <button onclick="handleLogout()" class="btn btn-outline">Cerrar Sesión</button>
-                </div>
-            </nav>
+            <div class="dashboard-container">
+                <aside class="sidebar">
+                    <div class="sidebar-header">
+                        <span class="logo">🛡️</span>
+                        <h2>Sentinel</h2>
+                    </div>
+                    
+                    <nav class="sidebar-nav">
+                        <div class="nav-section">
+                            <span class="nav-label">SISTEMA</span>
+                            <button onclick="showModule('infra')" class="nav-item active" id="nav-infra">🛠️ Infraestructura</button>
+                            <button onclick="showModule('entities')" class="nav-item" id="nav-entities">📦 Entidades/Plataformas</button>
+                            <button onclick="showModule('users')" class="nav-item" id="nav-users">👥 Usuarios y Roles</button>
+                        </div>
+                        
+                        <div class="nav-section">
+                            <span class="nav-label">SOPORTE</span>
+                            <button onclick="handleLogout()" class="nav-item btn-logout">🚪 Salir</button>
+                        </div>
+                    </nav>
+                </aside>
 
-            <main>
-                <section id="controls">
-                    <h2>Comandos Globales</h2>
-                    <div class="btn-group">
-                        <button onclick="runCmd('init_system')" class="btn btn-primary">Init System</button>
-                        <button onclick="runCmd('format_all')" class="btn btn-danger">Format All</button>
+                <main class="main-content">
+                    <!-- MÓDULO INFRAESTRUCTURA -->
+                    <div id="mod-infra" class="module">
+                        <header class="mod-header">
+                            <h1>Gestión de Infraestructura</h1>
+                            <p>Comandos críticos de control sobre PostgreSQL y Redis</p>
+                        </header>
+                        <div class="infra-grid">
+                            <div class="infra-card">
+                                <h3>Inicializar Sistema</h3>
+                                <p>Limpia la base y carga la configuración base de admin y roles.</p>
+                                <button onclick="runCmd('init_system')" class="btn btn-primary">Ejecutar Init</button>
+                            </div>
+                            <div class="infra-card danger">
+                                <h3>Formateo Total</h3>
+                                <p>Borra ABSOLUTAMENTE TODO en la DB y Redis. Acción irreversible.</p>
+                                <button onclick="runCmd('format_all')" class="btn btn-danger">Formatear Todo</button>
+                            </div>
+                        </div>
                     </div>
-                </section>
 
-                <section id="entity-manager">
-                    <h2>Gestor de Entidades</h2>
-                    <div class="input-group">
-                        <input type="text" id="entity-name" placeholder="Nombre de Entidad (ej: clientes)">
-                        <button onclick="createEntity()" class="btn btn-success">Crear Entidad</button>
-                    </div>
-                </section>
+                    <!-- MÓDULO ENTIDADES/PLATAFORMAS -->
+                    <div id="mod-entities" class="module hidden">
+                        <header class="mod-header">
+                            <h1>Entidades y Plataformas</h1>
+                            <p>Administra los esquemas de datos de tus SaaS</p>
+                        </header>
+                        
+                        <div class="entity-controls">
+                            <div class="input-group">
+                                <input type="text" id="entity-name" placeholder="Nombre de la plataforma/entidad...">
+                                <button onclick="createEntity()" class="btn btn-success">Crear Nueva Entidad</button>
+                            </div>
+                        </div>
 
-                <section id="data-viewer">
-                    <h2>Explorador de Datos</h2>
-                    <div class="input-group">
-                        <input type="text" id="view-entity" placeholder="Entidad a visualizar">
-                        <button onclick="viewData()" class="btn btn-primary">Ver Datos</button>
+                        <div class="entity-list-container">
+                            <div id="entity-grid" class="entity-grid">
+                                <!-- Cargado dinámicamente -->
+                            </div>
+                        </div>
+
+                        <div id="data-viewer" class="data-viewer hidden">
+                            <div class="viewer-header">
+                                <h3 id="current-entity-title">Datos de: <span>-</span></h3>
+                                <button onclick="closeViewer()" class="btn btn-outline">Cerrar</button>
+                            </div>
+                            <div id="data-table-container">
+                                <table id="data-table">
+                                    <thead><tr id="table-head"></tr></thead>
+                                    <tbody id="table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    <div id="data-table-container">
-                        <table id="data-table">
-                            <thead><tr id="table-head"></tr></thead>
-                            <tbody id="table-body"></tbody>
-                        </table>
+
+                    <!-- MÓDULO USUARIOS -->
+                    <div id="mod-users" class="module hidden">
+                        <header class="mod-header">
+                            <h1>Gestión de Usuarios y Roles</h1>
+                            <p>Control de acceso al motor de administración</p>
+                        </header>
+                        <div class="users-grid">
+                            <div class="user-section">
+                                <h3>Administradores</h3>
+                                <button onclick="viewData('admins')" class="btn btn-primary">Listar Administradores</button>
+                            </div>
+                            <div class="user-section">
+                                <h3>Roles del Sistema</h3>
+                                <button onclick="viewData('roles')" class="btn btn-primary">Listar Roles</button>
+                            </div>
+                        </div>
+                        <!-- El visor de datos se reutiliza aquí también -->
+                        <div id="user-data-viewer" class="data-viewer hidden">
+                            <div class="viewer-header">
+                                <h3 id="user-entity-title">Datos de: <span>-</span></h3>
+                                <button onclick="closeUserViewer()" class="btn btn-outline">Cerrar</button>
+                            </div>
+                            <div id="user-data-table-container">
+                                <table id="user-data-table">
+                                    <thead><tr id="user-table-head"></tr></thead>
+                                    <tbody id="user-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                </section>
-            </main>
+                </main>
+            </div>
         </div>
     </div>
     <script src="/static/js/app.js"></script>
