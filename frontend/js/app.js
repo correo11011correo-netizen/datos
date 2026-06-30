@@ -51,15 +51,18 @@ async function handleLogin() {
     if (!token) return alert('Por favor, ingrese el token');
 
     try {
-        // Verificación rápida usando la raíz de la API
-        // El endpoint / requiere el token via verify_admin si lo configuramos, 
-        // pero para simplificar, intentaremos un comando simple.
+        // 1. Guardar el token PRIMERO para que apiRequest pueda leerlo
+        session.saveToken(token);
+        
+        // 2. Ahora validar contra la API
         await apiRequest('/exec?cmd=init_system', 'POST', {});
         
-        session.saveToken(token);
+        // 3. Si la API respondió OK, entrar al dashboard
         switchView('admin');
         tokenInput.value = '';
     } catch (e) {
+        // Si falló, limpiar el token erróneo
+        session.clearToken();
         alert(`Acceso Denegado: ${e.message}`);
     }
 }
