@@ -105,14 +105,16 @@ class PlanCommandHandler:
             if existing:
                 session.execute(
                     text(
-                        "UPDATE plans SET name = :name, price = :price, features = :feat WHERE plan_id = :pid"
+                        "UPDATE plans SET name = :name, price = :price, "
+                        "features = :feat WHERE plan_id = :pid"
                     ),
                     {"name": name, "price": price, "feat": json.dumps(features), "pid": plan_id},
                 )
             else:
                 session.execute(
                     text(
-                        "INSERT INTO plans (plan_id, name, price, features) VALUES (:pid, :name, :price, :feat)"
+                        "INSERT INTO plans (plan_id, name, price, features) "
+                        "VALUES (:pid, :name, :price, :feat)"
                     ),
                     {"pid": plan_id, "name": name, "price": price, "feat": json.dumps(features)},
                 )

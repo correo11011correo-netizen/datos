@@ -47,7 +47,9 @@ class FinancialInfraCommandHandler:
 
     @command(
         name="fin.transaction.create",
-        description="Registers a new financial transaction request and generates a tracking reference.",
+        description=(
+            "Registers a new financial transaction request and generates a tracking reference."
+        ),
         params_model={
             "amount": "float",
             "currency": "string",
@@ -109,12 +111,12 @@ class FinancialInfraCommandHandler:
             }
 
             return data_commands.patch_record(
-                session, context, entity="transactions", record_id=transaction_id, updates=updates
+                session, context, entity="transactions", id=transaction_id, updates=updates
             )
         except Exception as e:
             return ServiceResponse.error_res(f"Status update error: {str(e)}", "TRANS_STATUS_ERROR")
 
-    # --- REGISTRO DE MOVIMIENTOS Y TRANSFERENCIAS (Ledger) ---
+    # --- REGISTRO de MOVIMIENTOS Y TRANSFERENCIAS (Ledger) ---
 
     @command(
         name="fin.movement.log",
@@ -166,7 +168,8 @@ class FinancialInfraCommandHandler:
     ) -> ServiceResponse:
         try:
             # Sumamos inflows y restamos outflows para el identificador
-            # Implementación genérica vía query_data y cálculo en memoria (para mantener simplicidad)
+            # Implementación genérica vía query_data y cálculo en memoria
+            # (para mantener simplicidad)
             res = data_commands.query_data(
                 session,
                 context,

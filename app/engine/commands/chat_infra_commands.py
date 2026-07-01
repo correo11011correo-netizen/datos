@@ -19,7 +19,10 @@ class ChatInfraCommandHandler:
 
     @command(
         name="chat.session.sync",
-        description="Synchronizes or creates a chat session for a user. Optimized for high-frequency updates.",
+        description=(
+            "Synchronizes or creates a chat session for a user. "
+            "Optimized for high-frequency updates."
+        ),
         params_model={
             "identifier": "string",  # phone or user_id
             "meta": "dict",

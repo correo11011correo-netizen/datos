@@ -26,14 +26,32 @@ class DBCommandHandler:
         try:
             # 1. Core System Tables
             core_tables = {
-                "tenants": "CREATE TABLE IF NOT EXISTS tenants (id UUID PRIMARY KEY, name TEXT, plan TEXT DEFAULT 'free')",
-                "api_keys": "CREATE TABLE IF NOT EXISTS api_keys (id SERIAL PRIMARY KEY, token TEXT UNIQUE, tenant_id UUID REFERENCES tenants(id))",
-                "plans": "CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, name TEXT, price FLOAT, features JSONB)",
-                "audit_logs": "CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, command TEXT, params JSONB, executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
-                "tenant_schemas": "CREATE TABLE IF NOT EXISTS tenant_schemas (tenant_id UUID PRIMARY KEY REFERENCES tenants(id), schema_definition JSONB NOT NULL)",
+                "tenants": (
+                    "CREATE TABLE IF NOT EXISTS tenants "
+                    "(id UUID PRIMARY KEY, name TEXT, plan TEXT DEFAULT 'free')"
+                ),
+                "api_keys": (
+                    "CREATE TABLE IF NOT EXISTS api_keys "
+                    "(id SERIAL PRIMARY KEY, token TEXT UNIQUE, "
+                    "tenant_id UUID REFERENCES tenants(id))"
+                ),
+                "plans": (
+                    "CREATE TABLE IF NOT EXISTS plans "
+                    "(plan_id TEXT PRIMARY KEY, name TEXT, price FLOAT, features JSONB)"
+                ),
+                "audit_logs": (
+                    "CREATE TABLE IF NOT EXISTS audit_logs "
+                    "(id SERIAL PRIMARY KEY, command TEXT, params JSONB, "
+                    "executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                ),
+                "tenant_schemas": (
+                    "CREATE TABLE IF NOT EXISTS tenant_schemas "
+                    "(tenant_id UUID PRIMARY KEY REFERENCES tenants(id), "
+                    "schema_definition JSONB NOT NULL)"
+                ),
             }
 
-            for table, sql in core_tables.items():
+            for sql in core_tables.values():
                 session.execute(text(sql))
 
             # 2. The Universal Generic Store
@@ -53,7 +71,8 @@ class DBCommandHandler:
             # Index for high-performance filtering by tenant and entity type
             session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_generic_data_tenant_type ON generic_data(tenant_id, entity_type)"
+                    "CREATE INDEX IF NOT EXISTS idx_generic_data_tenant_type "
+                    "ON generic_data(tenant_id, entity_type)"
                 )
             )
 

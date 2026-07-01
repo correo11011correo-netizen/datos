@@ -70,7 +70,7 @@ class SduiCommandHandler:
 
             if record_id:
                 res = data_commands.patch_record(
-                    session, context, entity="ui_themes", record_id=record_id, updates=data
+                    session, context, entity="ui_themes", id=record_id, updates=data
                 )
             else:
                 res = data_commands.insert_data(session, context, entity="ui_themes", data=data)
@@ -112,7 +112,7 @@ class SduiCommandHandler:
 
             if record_id:
                 res = data_commands.patch_record(
-                    session, context, entity="ui_layouts", record_id=record_id, updates=data
+                    session, context, entity="ui_layouts", id=record_id, updates=data
                 )
             else:
                 res = data_commands.insert_data(session, context, entity="ui_layouts", data=data)
@@ -147,7 +147,8 @@ class SduiCommandHandler:
                 filters={"screen_id": screen_id, "tenant_id": context.tenant_id},
             )
 
-            # Si el tenant no tiene un layout personalizado, podríamos devolver un layout por defecto
+            # Si el tenant no tiene un layout personalizado,
+            # podríamos devolver un layout por defecto
             layout = (
                 layout_res.data[0]
                 if layout_res.success and layout_res.data

@@ -106,7 +106,7 @@ async def execute_command(request: Request, cmd: str, tenant_id: str = Depends(g
 
                 params = json.loads(body)
             except json.JSONDecodeError:
-                _raise_http_exception(400, "Invalid JSON body")
+                _raise_http_exception(400, "Invalid JSON body. Please send a valid JSON object.")
 
         result = await dispatcher.dispatch(cmd, params, tenant_id=tenant_id)
 
@@ -118,6 +118,9 @@ async def execute_command(request: Request, cmd: str, tenant_id: str = Depends(g
                     "message": result.message,
                     "hint": result.hint,
                     "example": result.example,
+                    "documentation": (
+                        "Check /api/commands for the correct parameter schema for this command."
+                    ),
                 }
             return {"status": "success", "result": result.data, "message": result.message}
 
@@ -125,6 +128,13 @@ async def execute_command(request: Request, cmd: str, tenant_id: str = Depends(g
     except ValueError as e:
         parsed_error = _parse_dispatcher_error(e)
         if parsed_error:
+            # Enrich the error with general usage instructions
+            parsed_error["usage_guide"] = {
+                "endpoint": "/exec",
+                "method": "POST",
+                "required_header": "x-admin-token",
+                "discovery_endpoint": "/api/commands",
+            }
             return parsed_error
         _raise_http_exception(400, str(e))
     except Exception as e:
@@ -134,4 +144,5 @@ async def execute_command(request: Request, cmd: str, tenant_id: str = Depends(g
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # host="0.0.0.0" is required for deployment in containerized environments (Railway/Docker)
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec

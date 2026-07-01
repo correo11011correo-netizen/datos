@@ -70,7 +70,8 @@ class SalesCommandHandler:
                 available = product.get("quantity", 0)
                 if available < qty:
                     return ServiceResponse.error_res(
-                        f"Insufficient stock for {product.get('name', code)}. Available: {available}",
+                        f"Insufficient stock for {product.get('name', code)}. "
+                        f"Available: {available}",
                         "INSUFFICIENT_STOCK",
                     )
 

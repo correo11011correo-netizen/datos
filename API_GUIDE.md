@@ -58,13 +58,13 @@ Este endpoint devuelve un array de todos los comandos disponibles en la versión
 Los comandos están organizados por namespaces para facilitar su ubicación:
 
 ### 📦 `data.*` (Gestión de Datos Genéricos)
-Operaciones CRUD sobre cualquier entidad definida en el esquema virtual.
-- `data.query`: Consultas dinámicas con filtros.
-- `data.insert`: Inserción validada contra esquema.
-- `data.patch`: Actualización parcial de campos.
-- `data.upsert`: Insertar o actualizar basado en llave única.
-- `data.increment`: Operación atómica numérica.
-- `data.count`: Conteo de registros.
+Operaciones CRUD sobre cualquier entidad definida en el esquema virtual. Todos los comandos de escritura validan los datos contra el esquema del tenant.
+- `data.upsert`: Crea un registro o actualiza uno existente (si se proporciona el ID). Valida tipos de datos.
+- `data.get`: Recupera un único registro por su ID.
+- `data.delete`: Elimina un registro específico.
+- `data.query`: Consultas rápidas con filtros JSONB (ej: `{"category": "books"}`).
+- `data.list`: Versión paginada de `data.query` para manejo de grandes volúmenes de datos.
+- `data.count`: Cuenta cuántos registros coinciden con un filtro.
 
 ### 💰 `plan.*` y `fin.*` (Monetización y Finanzas)
 Gestión de planes de suscripción y flujos monetarios.

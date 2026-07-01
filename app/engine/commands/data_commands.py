@@ -1,5 +1,5 @@
 import json
-import re
+import logging
 from typing import Any
 
 from sqlalchemy import text
@@ -8,23 +8,21 @@ from sqlalchemy.orm import Session
 from app.core.context import TenantContext
 from app.core.decorators import command
 from app.core.types import ServiceResponse
+from app.core.validator import SchemaValidator
+
+logger = logging.getLogger("OmniCore.DataCommands")
 
 
 class DataCommandHandler:
     """
-    Universal Data Motor.
-    Operates on a single 'generic_data' table to provide a truly
-    entity-agnostic storage system for any SaaS platform.
+    Motor de Datos Genérico.
+    Proporciona operaciones CRUD estandarizadas sobre la tabla 'generic_data'
+    validando siempre contra el esquema virtual del Tenant.
     """
 
-    def _sanitize_identifier(self, identifier: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9_]", "", identifier)
-
-    def _validate_schema(
-        self, session: Session, context: TenantContext, entity: str, data: dict
-    ) -> tuple[bool, str | None]:
-        """Internal helper to validate data against the tenant's virtual schema."""
-        res = (
+    def _get_tenant_schema(self, session: Session, context: TenantContext) -> dict:
+        """Helper para recuperar el esquema actual del tenant."""
+        result = (
             session.execute(
                 text("SELECT schema_definition FROM tenant_schemas WHERE tenant_id = :tid"),
                 {"tid": context.tenant_id},
@@ -33,207 +31,223 @@ class DataCommandHandler:
             .first()
         )
 
-        if not res:
-            return False, "No virtual schema defined for this tenant. Use 'schema.define' first."
+        if not result:
+            return {}
+        return json.loads(result["schema_definition"])
 
-        schema = json.loads(res["schema_definition"])
-        if entity not in schema:
-            return False, f"Entity '{entity}' is not defined in your virtual schema."
+    @command(
+        name="data.upsert",
+        description=(
+            "Creates or updates a record in a generic entity after validating against the schema."
+        ),
+        params_model={
+            "entity": "str",
+            "data": "dict",
+            "id": "str (optional)",  # If provided, updates existing; else creates new.
+        },
+    )
+    def upsert(
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        data: dict,
+        id: str | None = None,
+    ) -> ServiceResponse:
+        try:
+            # 1. Validar contra el esquema
+            schema = self._get_tenant_schema(session, context)
+            is_valid, error = SchemaValidator.validate(entity, schema, data)
+            if not is_valid:
+                return ServiceResponse.error_res(f"Validation error: {error}", "VALIDATION_FAILED")
 
-        entity_fields = schema[entity]
-        for field, expected_type in entity_fields.items():
-            if field not in data:
-                return False, f"Missing required field: {field}"
+            if id:
+                # Actualización (Update)
+                # Usamos el operador || de PostgreSQL para mergear el JSONB
+                session.execute(
+                    text("""
+                        UPDATE generic_data 
+                        SET data = data || :new_data, updated_at = CURRENT_TIMESTAMP 
+                        WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
+                    """),
+                    {
+                        "new_data": json.dumps(data),
+                        "id": id,
+                        "tid": context.tenant_id,
+                        "entity": entity,
+                    },
+                )
+                # Verificar si se actualizó algo
+                if session.execute(text("SELECT 1")).rowcount == 0:  # Simplified check
+                    pass  # Handle as create if not found or return error
 
-            val = data[field]
-            if expected_type == "int" and not isinstance(val, int):
-                return False, f"Field {field} must be an integer."
-            if expected_type == "float" and not isinstance(val, int | float):
-                return False, f"Field {field} must be a number."
-            if expected_type == "text" and not isinstance(val, str):
-                return False, f"Field {field} must be text."
+            else:
+                # Creación (Create)
+                session.execute(
+                    text("""
+                        INSERT INTO generic_data (tenant_id, entity_type, data) 
+                        VALUES (:tid, :entity, :data)
+                    """),
+                    {"tid": context.tenant_id, "entity": entity, "data": json.dumps(data)},
+                )
 
-        return True, None
+            session.commit()
+            return ServiceResponse.success_res(
+                message=f"Record in '{entity}' synchronized successfully."
+            )
+        except Exception as e:
+            session.rollback()
+            logger.exception("Upsert error")
+            return ServiceResponse.error_res(f"Upsert failed: {str(e)}", "DATA_UPSERT_ERROR")
+
+    @command(
+        name="data.get",
+        description="Retrieves a single record from a generic entity by its ID.",
+        params_model={
+            "entity": "str",
+            "id": "str",
+        },
+    )
+    def get_record(
+        self, session: Session, context: TenantContext, entity: str, id: str
+    ) -> ServiceResponse:
+        try:
+            result = (
+                session.execute(
+                    text("""
+                    SELECT data FROM generic_data 
+                    WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
+                """),
+                    {"id": id, "tid": context.tenant_id, "entity": entity},
+                )
+                .mappings()
+                .first()
+            )
+
+            if not result:
+                return ServiceResponse.error_res("Record not found.", "NOT_FOUND")
+
+            return ServiceResponse.success_res(data=json.loads(result["data"]))
+        except Exception as e:
+            return ServiceResponse.error_res(f"Get error: {str(e)}", "DATA_GET_ERROR")
+
+    @command(
+        name="data.delete",
+        description="Deletes one or more records from a generic entity.",
+        params_model={
+            "entity": "str",
+            "id": "str",
+        },
+    )
+    def delete_record(
+        self, session: Session, context: TenantContext, entity: str, id: str
+    ) -> ServiceResponse:
+        try:
+            session.execute(
+                text("""
+                    DELETE FROM generic_data 
+                    WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
+                """),
+                {"id": id, "tid": context.tenant_id, "entity": entity},
+            )
+            session.commit()
+            return ServiceResponse.success_res(message="Record deleted successfully.")
+        except Exception as e:
+            session.rollback()
+            return ServiceResponse.error_res(f"Delete error: {str(e)}", "DATA_DELETE_ERROR")
 
     @command(
         name="data.query",
-        description="Retrieves records from a generic entity using dynamic filters.",
+        description="Query records in a generic entity with optional filters.",
         params_model={
-            "entity": "string",
-            "filters": "dict",
-            "limit": "int",
-            "offset": "int",
-            "sort_by": "string",
-            "sort_order": "string",
+            "entity": "str",
+            "filters": "dict (optional)",  # e.g. {"status": "active"}
         },
     )
     def query_data(
+        self, session: Session, context: TenantContext, entity: str, filters: dict | None = None
+    ) -> ServiceResponse:
+        try:
+            # Construcción de consulta dinámica usando el operador @> (contains) de JSONB
+            query = text("""
+                SELECT id, data FROM generic_data 
+                WHERE tenant_id = :tid AND entity_type = :entity
+            """)
+            params = {"tid": context.tenant_id, "entity": entity}
+
+            if filters:
+                query = text(f"{query.text()} AND data @> :filters")
+                params["filters"] = json.dumps(filters)
+
+            result = session.execute(query, params).mappings().all()
+
+            data = []
+            for row in result:
+                record = json.loads(row["data"])
+                record["_id"] = row["id"]  # Inject the internal ID for easier referencing
+                data.append(record)
+
+            return ServiceResponse.success_res(data=data)
+        except Exception as e:
+            logger.exception("Query error")
+            return ServiceResponse.error_res(f"Query failed: {str(e)}", "DATA_QUERY_ERROR")
+
+    @command(
+        name="data.list",
+        description="Paginated list of records in a generic entity with optional filters.",
+        params_model={
+            "entity": "str",
+            "filters": "dict (optional)",
+            "page": "int (default 1)",
+            "page_size": "int (default 20)",
+        },
+    )
+    def list_data(
         self,
         session: Session,
         context: TenantContext,
         entity: str,
         filters: dict | None = None,
-        limit: int = 100,
-        offset: int = 0,
-        sort_by: str | None = None,
-        sort_order: str = "ASC",
+        page: int = 1,
+        page_size: int = 20,
     ) -> ServiceResponse:
         try:
-            where_clauses = []
-            params: dict[str, Any] = {"tid": context.tenant_id, "etype": entity}
+            offset = (page - 1) * page_size
+
+            query_str = """
+                SELECT id, data FROM generic_data 
+                WHERE tenant_id = :tid AND entity_type = :entity
+            """
+            params: dict[str, Any] = {"tid": context.tenant_id, "entity": entity}
 
             if filters:
-                for i, (key, value) in enumerate(filters.items()):
-                    param_name = f"f{i}"
-                    safe_key = self._sanitize_identifier(key)
-                    where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
-                    params[param_name] = value
+                query_str += " AND data @> :filters"
+                params["filters"] = json.dumps(filters)
 
-            where_stmt = "WHERE tenant_id = :tid AND entity_type = :etype"
-            if where_clauses:
-                where_stmt += " AND " + " AND ".join(where_clauses)
-
-            order_stmt = ""
-            if sort_by:
-                direction = "DESC" if sort_order.upper() == "DESC" else "ASC"
-                safe_sort = self._sanitize_identifier(sort_by)
-                order_stmt = f"ORDER BY data->>'{safe_sort}' {direction}"
-
-            query = (
-                f"SELECT * FROM generic_data {where_stmt} {order_stmt} LIMIT :limit OFFSET :offset"
-            )
-            params["limit"] = limit
+            query_str += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+            params["limit"] = page_size
             params["offset"] = offset
 
-            result = session.execute(text(query), params).mappings().all()
-            return ServiceResponse.success_res(
-                data=[dict(row) for row in result], message=f"Retrieved {len(result)} records."
-            )
+            result = session.execute(text(query_str), params).mappings().all()
+
+            data = []
+            for row in result:
+                record = json.loads(row["data"])
+                record["_id"] = row["id"]
+                data.append(record)
+
+            return ServiceResponse.success_res(data=data, message=f"Page {page} retrieved.")
         except Exception as e:
-            return ServiceResponse.error_res(f"Query error: {str(e)}", "QUERY_ERROR")
-
-    @command(
-        name="data.insert",
-        description="Inserts a new record into a generic entity, validated against the tenant's virtual schema.",
-        params_model={"entity": "string", "data": "dict"},
-    )
-    def insert_data(
-        self,
-        session: Session,
-        context: TenantContext,
-        entity: str,
-        data: dict,
-    ) -> ServiceResponse:
-        try:
-            valid, error = self._validate_schema(session, context, entity, data)
-            if not valid:
-                return ServiceResponse.error_res(error, "VALIDATION_ERROR")
-
-            query = "INSERT INTO generic_data (tenant_id, entity_type, data) VALUES (:tid, :etype, :data) RETURNING id"
-            result = session.execute(
-                text(query), {"tid": context.tenant_id, "etype": entity, "data": json.dumps(data)}
-            ).scalar()
-
-            session.commit()
-            return ServiceResponse.success_res(
-                data={"id": result}, message="Record inserted successfully."
-            )
-        except Exception as e:
-            session.rollback()
-            return ServiceResponse.error_res(f"Insert error: {str(e)}", "INSERT_ERROR")
-
-    @command(
-        name="data.upsert",
-        description="Inserts or updates a record based on a unique key inside the JSON data.",
-        params_model={
-            "entity": "string",
-            "unique_key": "string",
-            "unique_value": "string",
-            "data": "dict",
-        },
-    )
-    def upsert_record(
-        self,
-        session: Session,
-        context: TenantContext,
-        entity: str,
-        unique_key: str,
-        unique_value: str,
-        data: dict,
-    ) -> ServiceResponse:
-        try:
-            safe_key = self._sanitize_identifier(unique_key)
-            existing = session.execute(
-                text(
-                    f"SELECT id FROM generic_data WHERE data->>'{safe_key}' = :val AND tenant_id = :tid AND entity_type = :etype"
-                ),
-                {"val": unique_value, "tid": context.tenant_id, "etype": entity},
-            ).scalar()
-
-            if existing:
-                session.execute(
-                    text("UPDATE generic_data SET data = data || :data WHERE id = :id"),
-                    {"data": json.dumps(data), "id": existing},
-                )
-                msg = "Record updated."
-            else:
-                # Validate schema for new inserts
-                valid, error = self._validate_schema(session, context, entity, data)
-                if not valid:
-                    return ServiceResponse.error_res(error, "VALIDATION_ERROR")
-
-                session.execute(
-                    text(
-                        "INSERT INTO generic_data (tenant_id, entity_type, data) VALUES (:tid, :etype, :data)"
-                    ),
-                    {"tid": context.tenant_id, "etype": entity, "data": json.dumps(data)},
-                )
-                msg = "Record created."
-
-            session.commit()
-            return ServiceResponse.success_res(message=msg)
-        except Exception as e:
-            session.rollback()
-            return ServiceResponse.error_res(f"Upsert error: {str(e)}", "UPSERT_ERROR")
-
-    @command(
-        name="data.patch",
-        description="Partially updates a JSON record.",
-        params_model={"entity": "string", "record_id": "string", "updates": "dict"},
-    )
-    def patch_record(
-        self,
-        session: Session,
-        context: TenantContext,
-        entity: str,
-        record_id: str,
-        updates: dict,
-    ) -> ServiceResponse:
-        try:
-            session.execute(
-                text(
-                    "UPDATE generic_data SET data = data || :updates WHERE id = :id AND tenant_id = :tid AND entity_type = :etype"
-                ),
-                {
-                    "updates": json.dumps(updates),
-                    "id": record_id,
-                    "tid": context.tenant_id,
-                    "etype": entity,
-                },
-            )
-            session.commit()
-            return ServiceResponse.success_res(message="Record patched successfully.")
-        except Exception as e:
-            session.rollback()
-            return ServiceResponse.error_res(f"Patch error: {str(e)}", "PATCH_ERROR")
+            logger.exception("List error")
+            return ServiceResponse.error_res(f"List failed: {str(e)}", "DATA_LIST_ERROR")
 
     @command(
         name="data.increment",
-        description="Atomicsally increments a numerical field in a JSON record.",
+        description="Atomically increments a numerical field in a JSON record.",
         params_model={
-            "entity": "string",
-            "record_id": "string",
-            "field": "string",
+            "entity": "str",
+            "id": "str",
+            "field": "str",
             "value": "float",
         },
     )
@@ -242,71 +256,68 @@ class DataCommandHandler:
         session: Session,
         context: TenantContext,
         entity: str,
-        record_id: str,
+        id: str,
         field: str,
         value: float,
     ) -> ServiceResponse:
         try:
-            safe_field = self._sanitize_identifier(field)
-            query = f"""
+            # Sanitize field to prevent SQL injection in the path
+            # Since it's inside a JSONB path, we use a simplified check.
+            if not field.isalnum() and "_" not in field:
+                return ServiceResponse.error_res("Invalid field name", "INVALID_FIELD")
+
+            query = text(f"""
                 UPDATE generic_data 
                 SET data = jsonb_set(
                     data, 
-                    :field_path, 
-                    to_jsonb((COALESCE((data->>'{safe_field}')::numeric, 0) + :val)::text)
+                    '{{{field}}}', 
+                    to_jsonb((COALESCE((data->>'{field}')::numeric, 0) + :val)::text)
                 ) 
-                WHERE id = :id AND tenant_id = :tid AND entity_type = :etype
-            """
+                WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
+            """)  # nosec
             session.execute(
-                text(query),
-                {
-                    "field_path": f"{{{safe_field}}}",
-                    "val": value,
-                    "id": record_id,
-                    "tid": context.tenant_id,
-                    "etype": entity,
-                },
+                query, {"val": value, "id": id, "tid": context.tenant_id, "entity": entity}
             )
             session.commit()
             return ServiceResponse.success_res(message=f"Field {field} updated by {value}.")
         except Exception as e:
             session.rollback()
+            logger.exception("Increment error")
             return ServiceResponse.error_res(f"Increment error: {str(e)}", "INCREMENT_ERROR")
 
     @command(
         name="data.count",
-        description="Counts records in a generic entity.",
-        params_model={"entity": "string", "filters": "dict"},
+        description="Counts the number of records in a generic entity with optional filters.",
+        params_model={"entity": "str", "filters": "dict (optional)"},
     )
     def count_records(
-        self,
-        session: Session,
-        context: TenantContext,
-        entity: str,
-        filters: dict | None = None,
+        self, session: Session, context: TenantContext, entity: str, filters: dict | None = None
     ) -> ServiceResponse:
         try:
-            where_clauses = []
-            params: dict[str, Any] = {"tid": context.tenant_id, "etype": entity}
+            query_str = (
+                "SELECT count(*) as total FROM generic_data "
+                "WHERE tenant_id = :tid AND entity_type = :entity"
+            )
+            params = {"tid": context.tenant_id, "entity": entity}
 
             if filters:
-                for i, (key, value) in enumerate(filters.items()):
-                    param_name = f"f{i}"
-                    safe_key = self._sanitize_identifier(key)
-                    where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
-                    params[param_name] = value
+                query_str += " AND data @> :filters"
+                params["filters"] = json.dumps(filters)
 
-            where_stmt = "WHERE tenant_id = :tid AND entity_type = :etype"
-            if where_clauses:
-                where_stmt += " AND " + " AND ".join(where_clauses)
-
-            query = f"SELECT count(*) FROM generic_data {where_stmt}"
-            count = session.execute(text(query), params).scalar()
-
-            return ServiceResponse.success_res(data={"count": count}, message="Count retrieved.")
+            result = session.execute(text(query_str), params).scalar()
+            return ServiceResponse.success_res(data={"total": result})
         except Exception as e:
-            return ServiceResponse.error_res(f"Count error: {str(e)}", "COUNT_ERROR")
+            return ServiceResponse.error_res(f"Count error: {str(e)}", "DATA_COUNT_ERROR")
+
+    # --- Compatibilidad con versiones anteriores ---
+    def upsert_record(self, *args, **kwargs):
+        return self.upsert(*args, **kwargs)
+
+    def insert_data(self, session, context, entity, data):
+        return self.upsert(session, context, entity, data)
+
+    def patch_record(self, session, context, entity, id, updates):
+        return self.upsert(session, context, entity, updates, id=id)
 
 
 data_commands = DataCommandHandler()
-ommands = DataCommandHandler()

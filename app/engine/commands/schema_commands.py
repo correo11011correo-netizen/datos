@@ -19,7 +19,7 @@ class SchemaCommandHandler:
         name="schema.define",
         description="Defines the virtual schema for the current tenant (tables and their fields).",
         params_model={
-            "schema": "dict",  # e.g., {"products": {"name": "text", "price": "float"}, "orders": {...}}
+            "schema": "dict",  # e.g., {"products": {"name": "text", "price": "float"}}
         },
     )
     def define_schema(
