@@ -121,14 +121,14 @@ class SalesCommandHandler:
                     },
                 )
 
-                # DESCUENTO ATÓMICO: Usamos el comando corregido de increment_data
-                # Pasamos el valor en negativo para restar
-                stock_res = data_commands.increment_field(
+                # DESCUENTO ATÓMICO: Usamos el nuevo motor de operaciones dinámicas
+                # Pasamos el valor en negativo para restar usando la operación 'sum' del Mapa
+                stock_res = data_commands.operate(
                     session,
                     context,
                     entity="products",
                     record_id=v_item["id"],
-                    field="quantity",
+                    operation="sum",
                     value=-v_item["qty"],
                 )
                 if not stock_res.success:

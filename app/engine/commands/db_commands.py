@@ -26,9 +26,17 @@ class DBCommandHandler:
         try:
             # 1. Core System Tables
             core_tables = {
+                "system_blueprints": (
+                    "CREATE TABLE IF NOT EXISTS system_blueprints "
+                    "(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
+                    "developer_name TEXT NOT NULL, "
+                    "map_definition JSONB NOT NULL, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                ),
                 "tenants": (
                     "CREATE TABLE IF NOT EXISTS tenants "
-                    "(id UUID PRIMARY KEY, name TEXT, plan TEXT DEFAULT 'free')"
+                    "(id UUID PRIMARY KEY, name TEXT, plan TEXT DEFAULT 'free', "
+                    "blueprint_id UUID REFERENCES system_blueprints(id))"
                 ),
                 "api_keys": (
                     "CREATE TABLE IF NOT EXISTS api_keys "
@@ -44,18 +52,19 @@ class DBCommandHandler:
                     "(id SERIAL PRIMARY KEY, command TEXT, params JSONB, "
                     "executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
                 ),
-                "tenant_schemas": (
-                    "CREATE TABLE IF NOT EXISTS tenant_schemas "
-                    "(tenant_id UUID PRIMARY KEY REFERENCES tenants(id), "
-                    "schema_definition JSONB NOT NULL)"
-                ),
             }
 
             for sql in core_tables.values():
                 session.execute(text(sql))
 
+            # Ensure tenants table has blueprint_id if it already existed
+            session.execute(
+                text(
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS blueprint_id UUID REFERENCES system_blueprints(id)"
+                )
+            )
+
             # 2. The Universal Generic Store
-            # This table replaces all 'entity_{name}' tables.
             session.execute(
                 text("""
                 CREATE TABLE IF NOT EXISTS generic_data (
@@ -78,7 +87,7 @@ class DBCommandHandler:
 
             session.commit()
             return ServiceResponse.success_res(
-                message="Infrastructure initialized. Universal data store ready."
+                message="Infrastructure initialized with Blueprint support. Universal data store ready."
             )
         except Exception as e:
             session.rollback()

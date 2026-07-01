@@ -7,6 +7,7 @@ from app.core.dispatcher import dispatcher
 from app.engine.commands.chat_infra_commands import chat_infra_commands
 from app.engine.commands.data_commands import data_commands
 from app.engine.commands.db_commands import db_commands
+from app.engine.commands.dev_commands import dev_commands
 from app.engine.commands.financial_infra_commands import financial_infra_commands
 from app.engine.commands.plan_commands import plan_commands
 from app.engine.commands.sales_commands import sales_commands
@@ -22,6 +23,7 @@ dispatcher.register_handler(sales_commands)
 dispatcher.register_handler(sdui_commands)
 dispatcher.register_handler(chat_infra_commands)
 dispatcher.register_handler(financial_infra_commands)
+dispatcher.register_handler(dev_commands)
 
 # Serve static files from the 'frontend' directory
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
