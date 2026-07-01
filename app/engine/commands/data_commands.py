@@ -1,10 +1,13 @@
 import json
+import re
+from typing import Any
 
-from core.context import TenantContext
-from core.decorators import command
-from core.types import ServiceResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.core.context import TenantContext
+from app.core.decorators import command
+from app.core.types import ServiceResponse
 
 
 class DataCommandHandler:
@@ -14,9 +17,15 @@ class DataCommandHandler:
     pueda gestionar su estado sin conocer la lógica de negocio.
     """
 
+    def _sanitize_identifier(self, identifier: str) -> str:
+        """Saneamiento estricto para identificadores (llaves JSON, nombres de tabla)."""
+        return re.sub(r"[^a-zA-Z0-9_]", "", identifier)
+
     @command(
         name="data.query",
-        description="Retrieves records from an entity using dynamic filters, sorting and pagination.",
+        description=(
+            "Retrieves records from an entity using dynamic filters, " "sorting and pagination."
+        ),
         params_model={
             "entity": "string",
             "filters": "dict",
@@ -24,6 +33,7 @@ class DataCommandHandler:
             "offset": "int",
             "sort_by": "string",
             "sort_order": "string",
+            "impersonate_tid": "string",
         },
     )
     def query_data(
@@ -36,22 +46,29 @@ class DataCommandHandler:
         offset: int = 0,
         sort_by: str | None = None,
         sort_order: str = "ASC",
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
             # 1. Sanitizar nombre de tabla
-            table_name = f"entity_{entity.lower().replace(' ', '_')}"
+            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
             safe_table = f'"{table_name}"'
+
+            # Determinamos qué Tenant ID usar (Soporte para Impersonación de Admin)
+            target_tid = context.tenant_id
+            if impersonate_tid and context.tenant_id == "00000000-0000-0000-0000-000000000000":
+                target_tid = impersonate_tid
 
             # 2. Construir cláusula WHERE dinámica para JSONB
             where_clauses = []
-            params = {"tid": context.tenant_id}
+            params: dict[str, Any] = {"tid": target_tid}
 
             if filters:
                 for i, (key, value) in enumerate(filters.items()):
                     param_name = f"f{i}"
+                    safe_key = self._sanitize_identifier(key)
                     # Usamos el operador ->> de PostgreSQL para obtener el valor como texto
-                    where_clauses.append(f"data->>'{key}' = :{param_name}")
-                    params[param_name] = str(value)
+                    where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
+                    params[param_name] = value
 
             where_stmt = "WHERE tenant_id = :tid"
             if where_clauses:
@@ -62,11 +79,12 @@ class DataCommandHandler:
             if sort_by:
                 # Validar que el orden sea solo ASC o DESC
                 direction = "DESC" if sort_order.upper() == "DESC" else "ASC"
-                order_stmt = f"ORDER BY data->>'{sort_by}' {direction}"
+                safe_sort = self._sanitize_identifier(sort_by)
+                order_stmt = f"ORDER BY data->>'{safe_sort}' {direction}"
 
             # 4. Construir Query Final
             query = (
-                f"SELECT * FROM {safe_table} {where_stmt} {order_stmt} LIMIT :limit OFFSET :offset"
+                f"SELECT * FROM {safe_table} {where_stmt} {order_stmt} LIMIT :limit OFFSET :offset"  # nosec
             )
             params["limit"] = limit
             params["offset"] = offset
@@ -96,7 +114,7 @@ class DataCommandHandler:
         updates: dict,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{entity.lower().replace(' ', '_')}"
+            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
             safe_table = f'"{table_name}"'
 
             # Usamos el operador || de PostgreSQL para fusionar JSONB
@@ -104,7 +122,7 @@ class DataCommandHandler:
             session.execute(
                 text(
                     "UPDATE {table} SET data = data || :updates WHERE id = :id AND tenant_id = :tid"
-                ).format(table=safe_table),
+                ).format(table=safe_table),  # nosec
                 {"updates": json.dumps(updates), "id": record_id, "tid": context.tenant_id},
             )
 
@@ -137,8 +155,9 @@ class DataCommandHandler:
         value: float,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{entity.lower().replace(' ', '_')}"
+            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
             safe_table = f'"{table_name}"'
+            safe_field = self._sanitize_identifier(field)
 
             # Lógica de incremento atómico en JSONB:
             # 1. Convertir el valor actual a numeric
@@ -148,17 +167,17 @@ class DataCommandHandler:
                 UPDATE {safe_table} 
                 SET data = jsonb_set(
                     data, 
-                    ':{field}_path', 
-                    to_jsonb((COALESCE((data->>':{field}')::numeric, 0) + :val)::text)
+                    ':{safe_field}_path', 
+                    to_jsonb((COALESCE((data->>':{safe_field}')::numeric, 0) + :val)::text)
                 ) 
                 WHERE id = :id AND tenant_id = :tid
-            """
+            """  # nosec
 
             session.execute(
                 text(query),
                 {
-                    "field_path": f"{{{field}}}",
-                    "field": field,
+                    "field_path": f"{{{safe_field}}}",
+                    "field": safe_field,
                     "val": value,
                     "id": record_id,
                     "tid": context.tenant_id,
@@ -191,13 +210,15 @@ class DataCommandHandler:
         data: dict,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{entity.lower().replace(' ', '_')}"
+            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
             safe_table = f'"{table_name}"'
+            safe_key = self._sanitize_identifier(unique_key)
 
             # Buscamos si ya existe el registro basado en el campo del JSONB
             existing = session.execute(
                 text(
-                    f"SELECT id FROM {safe_table} WHERE data->>'{unique_key}' = :val AND tenant_id = :tid"
+                    f"SELECT id FROM {safe_table} "
+                    f"WHERE data->>'{safe_key}' = :val AND tenant_id = :tid"  # nosec
                 ),
                 {"val": unique_value, "tid": context.tenant_id},
             ).scalar()
@@ -205,14 +226,14 @@ class DataCommandHandler:
             if existing:
                 # UPDATE
                 session.execute(
-                    text(f"UPDATE {safe_table} SET data = data || :data WHERE id = :id"),
+                    text(f"UPDATE {safe_table} SET data = data || :data WHERE id = :id"),  # nosec
                     {"data": json.dumps(data), "id": existing},
                 )
                 msg = "Record updated."
             else:
                 # INSERT
                 session.execute(
-                    text(f"INSERT INTO {safe_table} (tenant_id, data) VALUES (:tid, :data)"),
+                    text(f"INSERT INTO {safe_table} (tenant_id, data) VALUES (:tid, :data)"),  # nosec
                     {"tid": context.tenant_id, "data": json.dumps(data)},
                 )
                 msg = "Record created."
@@ -229,6 +250,7 @@ class DataCommandHandler:
         params_model={
             "entity": "string",
             "filters": "dict",
+            "impersonate_tid": "string",
         },
     )
     def count_records(
@@ -237,25 +259,32 @@ class DataCommandHandler:
         context: TenantContext,
         entity: str,
         filters: dict | None = None,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{entity.lower().replace(' ', '_')}"
+            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
             safe_table = f'"{table_name}"'
 
+            # Determinamos qué Tenant ID usar (Soporte para Impersonación de Admin)
+            target_tid = context.tenant_id
+            if impersonate_tid and context.tenant_id == "00000000-0000-0000-0000-000000000000":
+                target_tid = impersonate_tid
+
             where_clauses = []
-            params = {"tid": context.tenant_id}
+            params: dict[str, Any] = {"tid": target_tid}
 
             if filters:
                 for i, (key, value) in enumerate(filters.items()):
                     param_name = f"f{i}"
-                    where_clauses.append(f"data->>'{key}' = :{param_name}")
-                    params[param_name] = str(value)
+                    safe_key = self._sanitize_identifier(key)
+                    where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
+                    params[param_name] = value
 
             where_stmt = "WHERE tenant_id = :tid"
             if where_clauses:
                 where_stmt += " AND " + " AND ".join(where_clauses)
 
-            query = f"SELECT count(*) FROM {safe_table} {where_stmt}"
+            query = f"SELECT count(*) FROM {safe_table} {where_stmt}"  # nosec
             count = session.execute(text(query), params).scalar()
 
             return ServiceResponse.success_res(data={"count": count}, message="Count retrieved.")
