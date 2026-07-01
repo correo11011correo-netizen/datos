@@ -1,6 +1,6 @@
-import json
 import logging
 import uuid
+import json
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -10,7 +10,6 @@ from app.core.decorators import command
 from app.core.types import ServiceResponse
 
 logger = logging.getLogger("OmniCore.DevCommands")
-
 
 class DevCommandHandler:
     """
@@ -75,6 +74,39 @@ class DevCommandHandler:
                 )
             logger.exception("Error defining blueprint")
             return ServiceResponse.error_res(f"Blueprint error: {str(e)}", "BLUEPRINT_DEFINE_ERROR")
+
+    @command(
+        name="dev.blueprint.assign",
+        description="Assigns a specific Blueprint to a tenant.",
+        params_model={
+            "tenant_id": "str",
+            "blueprint_id": "str",
+        },
+        required_level="SYSTEM",
+    )
+    def assign_blueprint(
+        self, session: Session, context: TenantContext, tenant_id: str, blueprint_id: str
+    ) -> ServiceResponse:
+        try:
+            # Validar que el blueprint exista
+            bp_exists = session.execute(
+                text("SELECT 1 FROM system_blueprints WHERE id = :bid"), {"bid": blueprint_id}
+            ).scalar()
+
+            if not bp_exists:
+                return ServiceResponse.error_res(f"Blueprint {blueprint_id} not found.", "BLUEPRINT_NOT_FOUND")
+
+            # Asignar al tenant
+            session.execute(
+                text("UPDATE tenants SET blueprint_id = :bid WHERE id = :tid"),
+                {"bid": blueprint_id, "tid": tenant_id},
+            )
+            session.commit()
+            return ServiceResponse.success_res(message=f"Blueprint {blueprint_id} assigned to tenant {tenant_id}.")
+        except Exception as e:
+            session.rollback()
+            logger.exception("Error assigning blueprint")
+            return ServiceResponse.error_res(f"Assign error: {str(e)}", "BLUEPRINT_ASSIGN_ERROR")
 
     @command(
         name="dev.blueprint.list",
