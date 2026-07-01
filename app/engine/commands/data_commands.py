@@ -162,7 +162,11 @@ class DataCommandHandler:
             if not result:
                 return ServiceResponse.error_res("Record not found.", "NOT_FOUND")
 
-            return ServiceResponse.success_res(data=json.loads(result["data"]))
+            data = result["data"]
+            if isinstance(data, str):
+                data = json.loads(data)
+
+            return ServiceResponse.success_res(data=data)
         except Exception as e:
             return ServiceResponse.error_res(f"Get error: {str(e)}", "DATA_GET_ERROR")
 
@@ -220,7 +224,7 @@ class DataCommandHandler:
                 record = row["data"]
                 if isinstance(record, str):
                     record = json.loads(record)
-                
+
                 if record:
                     record["_id"] = row["id"]
                     data.append(record)
@@ -273,7 +277,7 @@ class DataCommandHandler:
                 record = row["data"]
                 if isinstance(record, str):
                     record = json.loads(record)
-                
+
                 if record:
                     record["_id"] = row["id"]
                     data.append(record)
