@@ -12,6 +12,16 @@ class CommandDispatcher:
     def register(self, name: str, func: Callable):
         self._commands[name] = func
 
+    def register_handler(self, handler: Any):
+        """
+        Automatically registers all methods of a handler class that are decorated with @command.
+        """
+        for attr_name in dir(handler):
+            attr = getattr(handler, attr_name)
+            if callable(attr) and hasattr(attr, "_command_meta"):
+                meta = attr._command_meta
+                self.register(meta["name"], attr)
+
     async def dispatch(self, cmd_name: str, params: dict[str, Any] | None = None) -> Any:
         if cmd_name not in self._commands:
             raise ValueError(f"Command {cmd_name} not found")
