@@ -68,6 +68,18 @@ async def list_commands():
     return dispatcher.get_all_commands()
 
 
+@app.get("/api/guide")
+async def get_guide():
+    """
+    Returns the API Quickstart guide.
+    """
+    try:
+        with open("API_GUIDE.md", "r", encoding="utf-8") as f:
+            return {"guide": f.read()}
+    except FileNotFoundError:
+        return {"error": "Guide not found on server"}
+
+
 def _raise_http_exception(status_code: int, detail: str):
     """Helper to raise HTTPException outside of a direct except block to satisfy Ruff B904."""
     raise HTTPException(status_code=status_code, detail=detail)
