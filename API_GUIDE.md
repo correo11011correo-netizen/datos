@@ -1,19 +1,115 @@
 # 🛡️ DB-Sentinel API Developer Guide (Blueprint Edition)
 
-## 🚀 Quick Start (Onboarding)
+## 🚀 Tutorial Paso a Paso: Desde Cero hasta la Primera Operación
 
-Si eres un desarrollador nuevo en el sistema, **debes seguir estos pasos en orden obligatorio** para evitar errores de infraestructura:
+Para que un desarrollador pueda poner en marcha su plataforma, debe seguir esta secuencia exacta. **No saltar ningún paso**, ya que cada uno construye la base del siguiente.
 
-1.  **Inicializar la Infraestructura**: 
-    Llama al comando `system.init_infra`. Esto crea las tablas maestras, incluyendo el almacén de Blueprints.
-    - `POST /exec?cmd=system.init_infra`
-2.  **Definir tu Mapa (Blueprint)**: 
-    Sube el diseño de tu plataforma (rutas JSONB y operaciones).
-    - `POST /exec?cmd=dev.blueprint.define` $\rightarrow$ Params: `developer_name`, `map_definition`.
-3.  **Asignar el Mapa al Tenant**: 
-    (Acción del Admin) El administrador debe vincular el ID de tu Blueprint al Tenant correspondiente.
-4.  **Operar**: 
-    Ahora puedes usar `data.upsert` para guardar datos o `data.operate` para ejecutar la lógica definida en tu mapa.
+### 🛠️ Fase A: Preparación de Infraestructura (Rol: Root Admin)
+*En esta fase se usa el token del Administrador Maestro.*
+
+**Paso 1: Inicializar la Base de Datos**
+Crea las tablas maestras y el almacén de Blueprints. Solo se hace una vez por instalación.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=system.init_infra" \
+     -H "x-admin-token: ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+```
+
+**Paso 2: Definir el Mapa (Blueprint) del Desarrollador**
+Aquí defines qué entidades existen y qué operaciones pueden hacer. 
+*Ejemplo: Creamos una entidad `wallet` con una operación `add_funds` que suma en la ruta `finance.balance`.*
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=dev.blueprint.define" \
+     -H "x-admin-token: ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "developer_name": "MiPlataforma",
+       "map_definition": {
+         "entities": {
+           "wallet": {
+             "storage_path": "finance.balance",
+             "operations": {
+               "add_funds": { "type": "sum" },
+               "spend": { "type": "subtract" }
+             }
+           }
+         }
+       }
+     }'
+```
+
+**Paso 3: Obtener el ID del Blueprint**
+Lista los mapas para copiar el `id` del mapa que acabas de crear.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=dev.blueprint.list" \
+     -H "x-admin-token: ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+```
+*(Copia el `id` resultante, ej: `d3117c09...`)*
+
+**Paso 4: Asignar el Mapa al Tenant**
+Vincula el Blueprint al cliente final.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=dev.blueprint.assign" \
+     -H "x-admin-token: ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "tenant_id": "UUID_DEL_TENANT",
+       "blueprint_id": "ID_DEL_BLUEPRINT_COPIADO"
+     }'
+```
+
+---
+
+### 💰 Fase B: Operación de Datos (Rol: Tenant / Desarrollador)
+*A partir de aquí, se puede usar el token del Tenant.*
+
+**Paso 5: Crear el primer registro (Upsert)**
+Crea el registro inicial. **Importante**: No envíes `id` para que el sistema genere un UUID automático.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=data.upsert" \
+     -H "x-admin-token: TOKEN_TENANT" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "entity": "wallet",
+       "data": { "finance": { "balance": 100.0 } }
+     }'
+```
+
+**Paso 6: Recuperar el UUID del registro**
+Para operar sobre un registro, necesitas su ID. Búscalo con `data.query`.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=data.query" \
+     -H "x-admin-token: TOKEN_TENANT" \
+     -H "Content-Type: application/json" \
+     -d '{ "entity": "wallet", "filters": {} }'
+```
+*(Copia el `_id` del resultado, ej: `0d426db9...`)*
+
+**Paso 7: Ejecutar Operación Dinámica (El Poder del Mapa)**
+Ahora ejecuta la acción `add_funds` definida en tu mapa. El sistema sabrá que debe sumar el valor en la ruta `finance.balance`.
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=data.operate" \
+     -H "x-admin-token: TOKEN_TENANT" \
+     -H, "Content-Type: application/json" \
+     -d '{
+       "entity": "wallet",
+       "id": "UUID_RECUPERADO",
+       "operation": "add_funds",
+       "value": 50.0
+     }'
+```
+
+**Paso 8: Verificar el Resultado Final**
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=data.get" \
+     -H "x-admin-token: TOKEN_TENANT" \
+     -H "Content-Type: application/json" \
+     -d '{ "entity": "wallet", "id": "UUID_RECUPERADO" }'
+```
+*Resultado esperado: `{"finance": {"balance": 150.0}}`*
 
 ---
 
