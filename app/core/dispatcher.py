@@ -3,7 +3,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from app.core.db import execute_raw
+from app.core.db import execute_raw, text
 
 
 class CommandDispatcher:
@@ -74,6 +74,7 @@ class CommandDispatcher:
         func = self._commands[cmd_name]
         meta = getattr(func, "_command_meta", {})
         required_level = meta.get("required_level", "TENANT")
+        required_plan = meta.get("required_plan", "free")
 
         # Root tenant (00000000...) has absolute power
         is_root = tenant_id == "00000000-0000-0000-0000-000000000000"
@@ -95,6 +96,37 @@ class CommandDispatcher:
                     }
                 )
             )
+
+        # --- Plan-Based Access Control (PBAC) ---
+        if not is_root:
+            # Basic hierarchy: free < pro < enterprise
+            plan_hierarchy = {"free": 0, "pro": 1, "enterprise": 2}
+
+            # Fetch tenant's actual plan from DB
+            from app.core.db import SessionLocal
+
+            with SessionLocal() as session:
+                tenant_plan = (
+                    session.execute(
+                        text("SELECT plan FROM tenants WHERE id = :tid"), {"tid": tenant_id}
+                    ).scalar()
+                    or "free"
+                )
+
+            tenant_plan_level = plan_hierarchy.get(tenant_plan.lower(), 0)
+            required_plan_level = plan_hierarchy.get(required_plan.lower(), 0)
+
+            if tenant_plan_level < required_plan_level:
+                raise ValueError(
+                    json.dumps(
+                        {
+                            "error": "PLAN_REQUIRED",
+                            "message": f"This command requires a {required_plan} plan or higher.",
+                            "hint": "Upgrade your plan to unlock this feature.",
+                            "example": None,
+                        }
+                    )
+                )
 
         # Audit logging
         self._log_audit(cmd_name, params)
@@ -123,15 +155,7 @@ class CommandDispatcher:
             raise TypeError(f"Command {cmd_name} is not callable")
 
     def _log_audit(self, cmd_name: str, params: dict[str, Any] | None):
-        # Ensure audit table exists (simplified for core)
-        execute_raw("""
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id SERIAL PRIMARY KEY,
-                command TEXT,
-                params JSONB,
-                executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # Audit log entry
         execute_raw(
             "INSERT INTO audit_logs (command, params) VALUES (:cmd, :params)",
             {"cmd": cmd_name, "params": json.dumps(params)},

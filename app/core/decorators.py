@@ -8,6 +8,7 @@ def command(
     description: str,
     params_model: dict[str, str] | None = None,
     required_level: str = "TENANT",
+    required_plan: str = "free",
 ):
     """
     Decorator to mark a method as a command executable by the dispatcher.
@@ -16,6 +17,9 @@ def command(
     required_level:
       - 'SYSTEM': Only the root admin can execute.
       - 'TENANT': Any authenticated tenant can execute.
+
+    required_plan:
+      - Minimum plan required to execute (e.g., 'free', 'pro', 'enterprise').
     """
 
     def decorator(func: Callable):
@@ -36,6 +40,7 @@ def command(
             "description": description,
             "params_model": params_model or {},
             "required_level": required_level,
+            "required_plan": required_plan,
         }
         return wrapper
 

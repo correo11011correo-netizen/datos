@@ -1,103 +1,101 @@
-# 🛡️ DB-Sentinel API Guide
+# 🛡️ DB-Sentinel API Developer Guide
 
-Bienvenido a la guía de integración de **DB-Sentinel**. Este sistema proporciona una capa de abstracción sobre PostgreSQL (JSONB) que permite gestionar datos de forma dinámica sin necesidad de migraciones constantes de esquema.
-
-## 🚀 Conceptos Fundamentales
-
-La API no utiliza rutas tradicionales para cada operación. En su lugar, implementa un **Command Dispatcher**. Todos los cambios y consultas pasan por un único punto de entrada: `/exec`.
+Bienvenido a la documentación técnica de **DB-Sentinel**. Este sistema implementa una arquitectura de **Command Dispatcher** sobre PostgreSQL (JSONB), permitiendo una gestión de datos dinámica, multi-tenant y extremadamente flexible.
 
 ---
 
-## 🔑 Autenticación
+## 🚀 Arquitectura de Interacción
 
-Todas las peticiones deben incluir un token en las cabeceras HTTP.
+A diferencia de las APIs REST tradicionales con múltiples endpoints, DB-Sentinel centraliza todas las operaciones en un único punto de entrada.
 
-- **Header:** `x-admin-token`
-- **Valor:** `<TU_TOKEN_SECRETO>`
+### El Endpoint Maestro: `/exec`
+Toda acción (lectura, escritura, configuración) se ejecuta enviando un comando específico a través de este endpoint.
 
-### Niveles de Acceso
-1. **Root Admin (System)**: Posee el token maestro. Puede gestionar la infraestructura, crear nuevos tenants y generar tokens.
-2. **Tenant User**: Posee un token vinculado a un `tenant_id`. Está restringido a los datos de su propia organización y no puede ejecutar comandos de sistema.
+- **URL:** `https://<tu-dominio>/exec`
+- **Método:** `POST`
+- **Parámetro de Query:** `cmd=<nombre_del_comando>`
+- **Cuerpo (Body):** JSON con los parámetros requeridos por el comando.
 
----
-
-## 🛠️ El Endpoint Maestro: `/exec`
-
-Este es el núcleo del sistema. Para ejecutar cualquier función, debes enviar una petición `POST`.
-
-**URL:** `https://<tu-dominio>/exec`
-**Método:** `POST`
-**Parámetros de URL:** `cmd=<nombre_del_comando>`
-
-### Formato de Petición
-El cuerpo de la petición debe ser un JSON con los parámetros que el comando específico requiera.
-
-**Ejemplo General:**
+**Ejemplo de flujo:**
 ```bash
-curl -X POST "https://datos-production.up.railway.app/exec?cmd=data.query" 
-     -H "x-admin-token: tu_token_aqui" 
+curl -X POST "https://api.sentinel.io/exec?cmd=data.query" 
+     -H "x-admin-token: TU_TOKEN" 
      -H "Content-Type: application/json" 
-     -d '{
-       "entity": "usuarios",
-       "filters": { "status": "activo" },
-       "limit": 5
-     }'
+     -d '{ "entity": "products", "filters": { "category": "electronics" } }'
 ```
 
 ---
 
-## 📚 Catálogo de Comandos y Auto-Descubrimiento
+## 🔑 Autenticación y Seguridad
 
-El sistema es **auto-didacta**. Si no conoces un comando o quieres ver los parámetros exactos, utiliza el endpoint de descubrimiento:
+El acceso está controlado mediante el header `x-admin-token`.
 
-**Endpoint:** `GET /api/commands`
-**Función:** Devuelve la lista de todos los comandos disponibles, sus descripciones y los esquemas de parámetros que esperan.
-
----
-
-## 👑 Administración de Cuentas (Solo Root Admin)
-
-Para evitar el uso compartido del token maestro, el administrador puede crear entornos aislados para otros desarrolladores o clientes.
-
-### 1. Crear un Tenant (Cuenta)
-`cmd=create_tenant`
-- **Parámetros:** `{"name": "NombreCuenta", "plan": "free|pro|enterprise"}`
-- **Resultado:** Devuelve un `tenant_id` único.
-
-### 2. Generar Token de Acceso
-`cmd=create_api_key`
-- **Parámetros:** `{"tenant_id": "ID_DEL_TENANT", "label": "EtiquetaToken"}`
-- **Resultado:** Devuelve el `token` que el usuario deberá usar en `x-admin-token`.
+| Rol | Alcance | Capacidades |
+| :--- | :--- | :--- |
+| **Root Admin** | Global | Gestión de infraestructura, creación de Tenants, configuración de Planes. |
+| **Tenant User** | Aislado | Solo puede acceder a los datos vinculados a su `tenant_id`. |
 
 ---
 
-## ⚡ Comandos de Datos más Comunes
+## 🔍 Auto-Descubrimiento (La llave para el desarrollador)
 
-### 1. `data.query` (Consulta Dinámica)
-Recupera registros filtrando por cualquier campo del JSONB.
-- **Parámetros:** `entity`, `filters` (dict), `limit`, `offset`, `sort_by`, `impersonate_tid`.
+El sistema es **auto-documentado**. No necesitas buscar una lista estática de comandos; puedes consultarlos en tiempo real.
 
-### 2. `data.patch` (Actualización Parcial)
-Actualiza solo los campos enviados, manteniendo el resto del objeto intacto.
-- **Parámetros:** `entity`, `record_id`, `updates` (dict).
+### Endpoint de Introspección
+`GET /api/commands`
 
-### 3. `data.increment` (Operación Atómica)
-Suma o resta un valor a un campo numérico sin riesgo de colisiones.
-- **Parámetros:** `entity`, `record_id`, `field`, `value`.
+Este endpoint devuelve un array de todos los comandos disponibles en la versión actual, incluyendo:
+- `command`: El nombre exacto para usar en `/exec?cmd=...`.
+- `description`: Qué hace el comando.
+- `params`: El esquema de parámetros esperado (tipos de datos y nombres).
 
-### 4. `data.upsert` (Insertar o Actualizar)
-Crea un registro nuevo o actualiza uno existente basado en una llave única.
-- **Parámetros:** `entity`, `unique_key`, `unique_value`, `data`.
+**Tip para desarrolladores:** Siempre comienza una nueva integración llamando a `/api/commands` para verificar si hay nuevas funcionalidades o cambios en los parámetros.
 
 ---
 
-## ⚠️ Manejo de Errores
+## 🛠️ Mapa de Comandos (Namespaces)
 
-La API devuelve errores estructurados para facilitar el debug:
+Los comandos están organizados por namespaces para facilitar su ubicación:
 
-- **`COMMAND_NOT_FOUND`**: El comando no existe. La API sugerirá el más parecido (Fuzzy Match).
-- **`INSUFFICIENT_PERMISSIONS`**: Intento de ejecutar comando de sistema con token de usuario.
-- **`QUERY_ERROR`**: Error en la construcción de la consulta o datos inválidos.
+### 📦 `data.*` (Gestión de Datos Genéricos)
+Operaciones CRUD sobre cualquier entidad definida en el esquema virtual.
+- `data.query`: Consultas dinámicas con filtros.
+- `data.insert`: Inserción validada contra esquema.
+- `data.patch`: Actualización parcial de campos.
+- `data.upsert`: Insertar o actualizar basado en llave única.
+- `data.increment`: Operación atómica numérica.
+- `data.count`: Conteo de registros.
+
+### 💰 `plan.*` y `fin.*` (Monetización y Finanzas)
+Gestión de planes de suscripción y flujos monetarios.
+- `plan.define` / `plan.set`: Configuración y asignación de planes.
+- `fin.gateway.configure`: Configuración de pasarelas de pago.
+- `fin.movement.log`: Registro de entradas/salidas de dinero.
+- `fin.ledger.balance`: Consulta de saldos.
+
+### 🎨 `sdui.*` (Server-Driven UI)
+Control dinámico de la interfaz de usuario.
+- `sdui.set_theme`: Define colores, logos y modo oscuro.
+- `sdui.set_layout`: Estructura de pantallas vía JSON.
+- `sdui.get_screen`: Recupera la config completa de una pantalla.
+
+### 🤖 `bot.*` y `chat.*` (Orquestación de IA/Chat)
+Gestión de grafos de conversación y sesiones.
+- `bot.graph.set_node` / `bot.graph.link`: Construcción del flujo del bot.
+- `chat.session.sync`: Sincronización de estado de usuario.
+- `chat.messages.stream`: Inserción masiva de mensajes.
+
+### ⚙️ `system.*` e `infra.*` (Mantenimiento)
+Operaciones de bajo nivel (Solo Root Admin).
+- `system.init_infra`: Inicializa tablas base del sistema.
+- `infra.backup.snapshot`: Crea respaldo de una entidad.
+- `infra.backup.restore`: Restaura datos desde un snapshot.
+
+---
+
+## ⚠️ Manejo de Errores y Debugging
+
+El sistema implementa **Fuzzy Matching**. Si escribes mal un comando, la API no solo dará error, sino que te sugerirá la corrección.
 
 **Ejemplo de respuesta de error:**
 ```json
@@ -105,7 +103,15 @@ La API devuelve errores estructurados para facilitar el debug:
   "status": "error",
   "error": "COMMAND_NOT_FOUND",
   "message": "Command 'data.quary' not found. Did you mean 'data.query'?",
-  "hint": "The command 'data.query' does the following: Retrieves records...",
-  "example": { "cmd": "data.query", "params": { ... } }
+  "hint": "The command 'data.query' retrieves records based on dynamic filters.",
+  "example": { 
+    "cmd": "data.query", 
+    "params": { "entity": "string", "filters": "dict" } 
+  }
 }
 ```
+
+### Códigos Comunes:
+- `VALIDATION_ERROR`: El dato enviado no coincide con el esquema definido en `schema.define`.
+- `INSUFFICIENT_PERMISSIONS`: Estás intentando usar un comando de Root Admin con un token de Tenant.
+- `SCHEMA_NOT_FOUND`: Debes definir el esquema virtual del Tenant antes de insertar datos.

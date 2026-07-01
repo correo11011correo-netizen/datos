@@ -12,20 +12,52 @@ from app.core.types import ServiceResponse
 
 class DataCommandHandler:
     """
-    Motor de Operaciones Genéricas sobre Datos JSONB.
-    Provee primitivas atómicas para que cualquier aplicación externa
-    pueda gestionar su estado sin conocer la lógica de negocio.
+    Universal Data Motor.
+    Operates on a single 'generic_data' table to provide a truly
+    entity-agnostic storage system for any SaaS platform.
     """
 
     def _sanitize_identifier(self, identifier: str) -> str:
-        """Saneamiento estricto para identificadores (llaves JSON, nombres de tabla)."""
         return re.sub(r"[^a-zA-Z0-9_]", "", identifier)
+
+    def _validate_schema(
+        self, session: Session, context: TenantContext, entity: str, data: dict
+    ) -> tuple[bool, str | None]:
+        """Internal helper to validate data against the tenant's virtual schema."""
+        res = (
+            session.execute(
+                text("SELECT schema_definition FROM tenant_schemas WHERE tenant_id = :tid"),
+                {"tid": context.tenant_id},
+            )
+            .mappings()
+            .first()
+        )
+
+        if not res:
+            return False, "No virtual schema defined for this tenant. Use 'schema.define' first."
+
+        schema = json.loads(res["schema_definition"])
+        if entity not in schema:
+            return False, f"Entity '{entity}' is not defined in your virtual schema."
+
+        entity_fields = schema[entity]
+        for field, expected_type in entity_fields.items():
+            if field not in data:
+                return False, f"Missing required field: {field}"
+
+            val = data[field]
+            if expected_type == "int" and not isinstance(val, int):
+                return False, f"Field {field} must be an integer."
+            if expected_type == "float" and not isinstance(val, int | float):
+                return False, f"Field {field} must be a number."
+            if expected_type == "text" and not isinstance(val, str):
+                return False, f"Field {field} must be text."
+
+        return True, None
 
     @command(
         name="data.query",
-        description=(
-            "Retrieves records from an entity using dynamic filters, " "sorting and pagination."
-        ),
+        description="Retrieves records from a generic entity using dynamic filters.",
         params_model={
             "entity": "string",
             "filters": "dict",
@@ -33,7 +65,6 @@ class DataCommandHandler:
             "offset": "int",
             "sort_by": "string",
             "sort_order": "string",
-            "impersonate_tid": "string",
         },
     )
     def query_data(
@@ -46,45 +77,30 @@ class DataCommandHandler:
         offset: int = 0,
         sort_by: str | None = None,
         sort_order: str = "ASC",
-        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
-            # 1. Sanitizar nombre de tabla
-            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
-            safe_table = f'"{table_name}"'
-
-            # Determinamos qué Tenant ID usar (Soporte para Impersonación de Admin)
-            target_tid = context.tenant_id
-            if impersonate_tid and context.tenant_id == "00000000-0000-0000-0000-000000000000":
-                target_tid = impersonate_tid
-
-            # 2. Construir cláusula WHERE dinámica para JSONB
             where_clauses = []
-            params: dict[str, Any] = {"tid": target_tid}
+            params: dict[str, Any] = {"tid": context.tenant_id, "etype": entity}
 
             if filters:
                 for i, (key, value) in enumerate(filters.items()):
                     param_name = f"f{i}"
                     safe_key = self._sanitize_identifier(key)
-                    # Usamos el operador ->> de PostgreSQL para obtener el valor como texto
                     where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
                     params[param_name] = value
 
-            where_stmt = "WHERE tenant_id = :tid"
+            where_stmt = "WHERE tenant_id = :tid AND entity_type = :etype"
             if where_clauses:
                 where_stmt += " AND " + " AND ".join(where_clauses)
 
-            # 3. Ordenamiento
             order_stmt = ""
             if sort_by:
-                # Validar que el orden sea solo ASC o DESC
                 direction = "DESC" if sort_order.upper() == "DESC" else "ASC"
                 safe_sort = self._sanitize_identifier(sort_by)
                 order_stmt = f"ORDER BY data->>'{safe_sort}' {direction}"
 
-            # 4. Construir Query Final
             query = (
-                f"SELECT * FROM {safe_table} {where_stmt} {order_stmt} LIMIT :limit OFFSET :offset"  # nosec
+                f"SELECT * FROM generic_data {where_stmt} {order_stmt} LIMIT :limit OFFSET :offset"
             )
             params["limit"] = limit
             params["offset"] = offset
@@ -97,102 +113,38 @@ class DataCommandHandler:
             return ServiceResponse.error_res(f"Query error: {str(e)}", "QUERY_ERROR")
 
     @command(
-        name="data.patch",
-        description="Partially updates a JSON record without overwriting the entire object.",
-        params_model={
-            "entity": "string",
-            "record_id": "string",
-            "updates": "dict",
-        },
+        name="data.insert",
+        description="Inserts a new record into a generic entity, validated against the tenant's virtual schema.",
+        params_model={"entity": "string", "data": "dict"},
     )
-    def patch_record(
+    def insert_data(
         self,
         session: Session,
         context: TenantContext,
         entity: str,
-        record_id: str,
-        updates: dict,
+        data: dict,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
-            safe_table = f'"{table_name}"'
+            valid, error = self._validate_schema(session, context, entity, data)
+            if not valid:
+                return ServiceResponse.error_res(error, "VALIDATION_ERROR")
 
-            # Usamos el operador || de PostgreSQL para fusionar JSONB
-            # Esto actualiza solo las llaves proporcionadas en 'updates'
-            session.execute(
-                text(
-                    "UPDATE {table} SET data = data || :updates WHERE id = :id AND tenant_id = :tid"
-                ).format(table=safe_table),  # nosec
-                {"updates": json.dumps(updates), "id": record_id, "tid": context.tenant_id},
-            )
-
-            if session.execute(text("SELECT 1")).rowcount == 0:  # Simple check
-                pass  # In real scenario, check rowcount of the update
+            query = "INSERT INTO generic_data (tenant_id, entity_type, data) VALUES (:tid, :etype, :data) RETURNING id"
+            result = session.execute(
+                text(query), {"tid": context.tenant_id, "etype": entity, "data": json.dumps(data)}
+            ).scalar()
 
             session.commit()
-            return ServiceResponse.success_res(message="Record patched successfully.")
-        except Exception as e:
-            session.rollback()
-            return ServiceResponse.error_res(f"Patch error: {str(e)}", "PATCH_ERROR")
-
-    @command(
-        name="data.increment",
-        description="Atomicsally increments or decrements a numerical field in a JSON record.",
-        params_model={
-            "entity": "string",
-            "record_id": "string",
-            "field": "string",
-            "value": "float",
-        },
-    )
-    def increment_field(
-        self,
-        session: Session,
-        context: TenantContext,
-        entity: str,
-        record_id: str,
-        field: str,
-        value: float,
-    ) -> ServiceResponse:
-        try:
-            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
-            safe_table = f'"{table_name}"'
-            safe_field = self._sanitize_identifier(field)
-
-            # Lógica de incremento atómico en JSONB:
-            # 1. Convertir el valor actual a numeric
-            # 2B. Sumar el valor
-            # 3C. Volver a convertir a JSONB
-            query = f"""
-                UPDATE {safe_table} 
-                SET data = jsonb_set(
-                    data, 
-                    ':{safe_field}_path', 
-                    to_jsonb((COALESCE((data->>':{safe_field}')::numeric, 0) + :val)::text)
-                ) 
-                WHERE id = :id AND tenant_id = :tid
-            """  # nosec
-
-            session.execute(
-                text(query),
-                {
-                    "field_path": f"{{{safe_field}}}",
-                    "field": safe_field,
-                    "val": value,
-                    "id": record_id,
-                    "tid": context.tenant_id,
-                },
+            return ServiceResponse.success_res(
+                data={"id": result}, message="Record inserted successfully."
             )
-
-            session.commit()
-            return ServiceResponse.success_res(message=f"Field {field} updated by {value}.")
         except Exception as e:
             session.rollback()
-            return ServiceResponse.error_res(f"Increment error: {str(e)}", "INCREMENT_ERROR")
+            return ServiceResponse.error_res(f"Insert error: {str(e)}", "INSERT_ERROR")
 
     @command(
         name="data.upsert",
-        description="Inserts a record or updates it if a specific unique key already exists.",
+        description="Inserts or updates a record based on a unique key inside the JSON data.",
         params_model={
             "entity": "string",
             "unique_key": "string",
@@ -210,31 +162,31 @@ class DataCommandHandler:
         data: dict,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
-            safe_table = f'"{table_name}"'
             safe_key = self._sanitize_identifier(unique_key)
-
-            # Buscamos si ya existe el registro basado en el campo del JSONB
             existing = session.execute(
                 text(
-                    f"SELECT id FROM {safe_table} "
-                    f"WHERE data->>'{safe_key}' = :val AND tenant_id = :tid"  # nosec
+                    f"SELECT id FROM generic_data WHERE data->>'{safe_key}' = :val AND tenant_id = :tid AND entity_type = :etype"
                 ),
-                {"val": unique_value, "tid": context.tenant_id},
+                {"val": unique_value, "tid": context.tenant_id, "etype": entity},
             ).scalar()
 
             if existing:
-                # UPDATE
                 session.execute(
-                    text(f"UPDATE {safe_table} SET data = data || :data WHERE id = :id"),  # nosec
+                    text("UPDATE generic_data SET data = data || :data WHERE id = :id"),
                     {"data": json.dumps(data), "id": existing},
                 )
                 msg = "Record updated."
             else:
-                # INSERT
+                # Validate schema for new inserts
+                valid, error = self._validate_schema(session, context, entity, data)
+                if not valid:
+                    return ServiceResponse.error_res(error, "VALIDATION_ERROR")
+
                 session.execute(
-                    text(f"INSERT INTO {safe_table} (tenant_id, data) VALUES (:tid, :data)"),  # nosec
-                    {"tid": context.tenant_id, "data": json.dumps(data)},
+                    text(
+                        "INSERT INTO generic_data (tenant_id, entity_type, data) VALUES (:tid, :etype, :data)"
+                    ),
+                    {"tid": context.tenant_id, "etype": entity, "data": json.dumps(data)},
                 )
                 msg = "Record created."
 
@@ -245,13 +197,86 @@ class DataCommandHandler:
             return ServiceResponse.error_res(f"Upsert error: {str(e)}", "UPSERT_ERROR")
 
     @command(
-        name="data.count",
-        description="Counts records in an entity matching specific filters.",
+        name="data.patch",
+        description="Partially updates a JSON record.",
+        params_model={"entity": "string", "record_id": "string", "updates": "dict"},
+    )
+    def patch_record(
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        record_id: str,
+        updates: dict,
+    ) -> ServiceResponse:
+        try:
+            session.execute(
+                text(
+                    "UPDATE generic_data SET data = data || :updates WHERE id = :id AND tenant_id = :tid AND entity_type = :etype"
+                ),
+                {
+                    "updates": json.dumps(updates),
+                    "id": record_id,
+                    "tid": context.tenant_id,
+                    "etype": entity,
+                },
+            )
+            session.commit()
+            return ServiceResponse.success_res(message="Record patched successfully.")
+        except Exception as e:
+            session.rollback()
+            return ServiceResponse.error_res(f"Patch error: {str(e)}", "PATCH_ERROR")
+
+    @command(
+        name="data.increment",
+        description="Atomicsally increments a numerical field in a JSON record.",
         params_model={
             "entity": "string",
-            "filters": "dict",
-            "impersonate_tid": "string",
+            "record_id": "string",
+            "field": "string",
+            "value": "float",
         },
+    )
+    def increment_field(
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        record_id: str,
+        field: str,
+        value: float,
+    ) -> ServiceResponse:
+        try:
+            safe_field = self._sanitize_identifier(field)
+            query = f"""
+                UPDATE generic_data 
+                SET data = jsonb_set(
+                    data, 
+                    :field_path, 
+                    to_jsonb((COALESCE((data->>'{safe_field}')::numeric, 0) + :val)::text)
+                ) 
+                WHERE id = :id AND tenant_id = :tid AND entity_type = :etype
+            """
+            session.execute(
+                text(query),
+                {
+                    "field_path": f"{{{safe_field}}}",
+                    "val": value,
+                    "id": record_id,
+                    "tid": context.tenant_id,
+                    "etype": entity,
+                },
+            )
+            session.commit()
+            return ServiceResponse.success_res(message=f"Field {field} updated by {value}.")
+        except Exception as e:
+            session.rollback()
+            return ServiceResponse.error_res(f"Increment error: {str(e)}", "INCREMENT_ERROR")
+
+    @command(
+        name="data.count",
+        description="Counts records in a generic entity.",
+        params_model={"entity": "string", "filters": "dict"},
     )
     def count_records(
         self,
@@ -259,19 +284,10 @@ class DataCommandHandler:
         context: TenantContext,
         entity: str,
         filters: dict | None = None,
-        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
-            table_name = f"entity_{self._sanitize_identifier(entity.lower().replace(' ', '_'))}"
-            safe_table = f'"{table_name}"'
-
-            # Determinamos qué Tenant ID usar (Soporte para Impersonación de Admin)
-            target_tid = context.tenant_id
-            if impersonate_tid and context.tenant_id == "00000000-0000-0000-0000-000000000000":
-                target_tid = impersonate_tid
-
             where_clauses = []
-            params: dict[str, Any] = {"tid": target_tid}
+            params: dict[str, Any] = {"tid": context.tenant_id, "etype": entity}
 
             if filters:
                 for i, (key, value) in enumerate(filters.items()):
@@ -280,11 +296,11 @@ class DataCommandHandler:
                     where_clauses.append(f"data->>'{safe_key}' = :{param_name}")
                     params[param_name] = value
 
-            where_stmt = "WHERE tenant_id = :tid"
+            where_stmt = "WHERE tenant_id = :tid AND entity_type = :etype"
             if where_clauses:
                 where_stmt += " AND " + " AND ".join(where_clauses)
 
-            query = f"SELECT count(*) FROM {safe_table} {where_stmt}"  # nosec
+            query = f"SELECT count(*) FROM generic_data {where_stmt}"
             count = session.execute(text(query), params).scalar()
 
             return ServiceResponse.success_res(data={"count": count}, message="Count retrieved.")
@@ -293,3 +309,4 @@ class DataCommandHandler:
 
 
 data_commands = DataCommandHandler()
+ommands = DataCommandHandler()
