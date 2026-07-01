@@ -67,6 +67,12 @@ class DevCommandHandler:
             return ServiceResponse.success_res(message=message)
         except Exception as e:
             session.rollback()
+            # Capturar error de tabla inexistente para dar guía clara al desarrollador
+            if "system_blueprints" in str(e).lower():
+                return ServiceResponse.error_res(
+                    "Infrastructure not initialized. Please run 'system.init_infra' to create required tables.",
+                    "INFRASTRUCTURE_NOT_READY"
+                )
             logger.exception("Error defining blueprint")
             return ServiceResponse.error_res(f"Blueprint error: {str(e)}", "BLUEPRINT_DEFINE_ERROR")
 
@@ -99,6 +105,12 @@ class DevCommandHandler:
                 data=blueprints, message=f"Retrieved {len(blueprints)} blueprints."
             )
         except Exception as e:
+            # Capturar error de tabla inexistente para dar guía clara al desarrollador
+            if "system_blueprints" in str(e).lower():
+                return ServiceResponse.error_res(
+                    "Infrastructure not initialized. Please run 'system.init_infra' to create required tables.",
+                    "INFRASTRUCTURE_NOT_READY"
+                )
             logger.exception("Error listing blueprints")
             return ServiceResponse.error_res(f"List error: {str(e)}", "BLUEPRINT_LIST_ERROR")
 
