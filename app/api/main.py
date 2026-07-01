@@ -54,8 +54,23 @@ async def get_current_tenant(x_api_key: str = Header(..., alias="x-admin-token")
 
 
 @app.get("/")
-async def serve_index():
-    return FileResponse("frontend/index.html")
+async def serve_index(request: Request):
+    # If the request is from a browser or specifically asks for HTML, serve the frontend
+    accept_header = request.headers.get("accept", "")
+    if "text/html" in accept_header:
+        return FileResponse("frontend/index.html")
+    
+    # For curl, API clients, or JSON requests, provide a discovery guide
+    return {
+        "status": "online",
+        "message": "Welcome to DB-Sentinel API. The system is operational.",
+        "discovery": {
+            "api_guide": "/api/guide",
+            "available_commands": "/api/commands",
+            "execution_endpoint": "/exec",
+        },
+        "onboarding": "To get started, visit /api/guide to understand the Blueprint architecture and /api/commands to see all available operations."
+    }
 
 
 @app.get("/api/status")
