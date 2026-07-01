@@ -203,23 +203,27 @@ class DataCommandHandler:
         self, session: Session, context: TenantContext, entity: str, filters: dict | None = None
     ) -> ServiceResponse:
         try:
-            query = text("""
+            query_str = """
                 SELECT id, data FROM generic_data 
                 WHERE tenant_id = :tid AND entity_type = :entity
-            """)
+            """
             params = {"tid": context.tenant_id, "entity": entity}
 
             if filters:
-                query = text(f"{query.text()} AND data @> :filters")
+                query_str += " AND data @> :filters"
                 params["filters"] = json.dumps(filters)
 
-            result = session.execute(query, params).mappings().all()
+            result = session.execute(text(query_str), params).mappings().all()
 
             data = []
             for row in result:
-                record = json.loads(row["data"])
-                record["_id"] = row["id"]
-                data.append(record)
+                record = row["data"]
+                if isinstance(record, str):
+                    record = json.loads(record)
+                
+                if record:
+                    record["_id"] = row["id"]
+                    data.append(record)
 
             return ServiceResponse.success_res(data=data)
         except Exception as e:
@@ -266,9 +270,13 @@ class DataCommandHandler:
 
             data = []
             for row in result:
-                record = json.loads(row["data"])
-                record["_id"] = row["id"]
-                data.append(record)
+                record = row["data"]
+                if isinstance(record, str):
+                    record = json.loads(record)
+                
+                if record:
+                    record["_id"] = row["id"]
+                    data.append(record)
 
             return ServiceResponse.success_res(data=data, message=f"Page {page} retrieved.")
         except Exception as e:
