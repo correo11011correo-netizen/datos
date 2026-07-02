@@ -205,6 +205,7 @@ ightarrow$ Blueprint.
 - `dev.cache.clear`: Fuerza la actualización del Blueprint desde la base de datos (limpia la caché).
 
 #### 💰 `plan.*` y `fin.*` (Negocio y Finanzas)
+**⚠️ NOTA: Estos comandos son PROTOTIPOS y EJEMPLOS DE USO.** No constituyen una garantía de lógica de negocio. El desarrollador es responsable de validar y extender esta lógica según sus necesidades.
 - `plan.define` / `plan.set`: Gestión de niveles de suscripción.
 - `fin.transaction.create`: Registro de transacciones financieras.
 - `fin.ledger.balance`: Cálculo de saldos mediante historial de movimientos.
@@ -229,3 +230,4 @@ El sistema es **auto-documentado**. Si envías un comando incorrecto, la API te 
 - `BLUEPRINT_ENTITY_NOT_FOUND`: La entidad no existe en tu definición de mapa.
 
 **Tip Pro:** Visita `GET /api/commands` para ver la lista completa de comandos disponibles en tiempo real y sus esquemas de parámetros.
+nibles en tiempo real y sus esquemas de parámetros.
