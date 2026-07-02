@@ -142,14 +142,37 @@ class DBCommandHandler:
     )
     def format_db(self, session: Session, context: TenantContext) -> ServiceResponse:
         try:
-            session.execute(text("TRUNCATE TABLE generic_data CASCADE"))
-            session.execute(text("TRUNCATE TABLE tenants CASCADE"))
-            session.execute(text("TRUNCATE TABLE api_keys CASCADE"))
-            session.execute(text("TRUNCATE TABLE dev_reports CASCADE"))
+            print("\n[RAW EVENT] STARTING DATABASE FORMATTING")
+
+            tables = ["generic_data", "tenants", "api_keys", "dev_reports"]
+            for table in tables:
+                print(f"[RAW EVENT] Executing: TRUNCATE TABLE {table} CASCADE")
+                session.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+
             session.commit()
+            print("[RAW EVENT] Transaction committed.")
+
+            # --- VERIFICATION STEP ---
+            print("[RAW EVENT] Verifying wipe...")
+            verification_failed = False
+            for table in tables:
+                count = session.execute(text(f"SELECT count(*) FROM {table}")).scalar()
+                print(f"[RAW EVENT] Table {table} count: {count}")
+                if count > 0:
+                    verification_failed = True
+
+            if verification_failed:
+                print("[RAW EVENT] CRITICAL: Wipe verification failed. Data still exists.")
+                return ServiceResponse.error_res(
+                    "Format command executed but verification failed: some data persists.",
+                    "FORMAT_VERIFICATION_FAILED",
+                )
+
+            print("[RAW EVENT] DATABASE FORMATTED SUCCESSFULLY\n")
             return ServiceResponse.success_res(message="System database formatted successfully.")
         except Exception as e:
             session.rollback()
+            print(f"[RAW EVENT] ERROR during format: {str(e)}")
             return ServiceResponse.error_res(f"Format error: {str(e)}", "FORMAT_ERROR")
 
     @command(
