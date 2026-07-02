@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.core.db import execute_raw, text
+from app.core.redis_core import publish_event
 
 
 class CommandDispatcher:
@@ -166,8 +167,19 @@ class CommandDispatcher:
                 import inspect
 
                 if inspect.iscoroutinefunction(func):
-                    return await func(**full_params)
-                return func(**full_params)
+                    result = await func(**full_params)
+                else:
+                    result = func(**full_params)
+
+                # --- Real-Time Trigger: Redis Event ---
+                # If a 'data.*' command succeeded, notify the tenant via Redis
+                if tid != "admin_root" and cmd_name.startswith("data."):
+                    publish_event(
+                        f"tenant_{tid}_events",
+                        {"command": cmd_name, "params": params, "status": "success"},
+                    )
+
+                return result
 
             raise TypeError(f"Command {cmd_name} is not callable")
 

@@ -1,3 +1,5 @@
+import json
+
 import redis  # type: ignore
 
 from app.core.config import settings
@@ -15,3 +17,18 @@ def get_cache(key: str):
 
 def clear_cache():
     redis_client.flushall()
+
+
+def publish_event(channel: str, message: dict):
+    """
+    Publishes an event to a specific Redis channel.
+    Used by the Dispatcher to notify tenants of data changes.
+    """
+    redis_client.publish(channel, json.dumps(message))
+
+
+def get_redis_pubsub():
+    """
+    Returns a pubsub object for listening to events.
+    """
+    return redis_client.pubsub()

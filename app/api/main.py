@@ -1,9 +1,12 @@
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+import asyncio
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.dispatcher import dispatcher
+from app.core.redis_core import get_redis_pubsub
 from app.engine.commands.chat_infra_commands import chat_infra_commands
 from app.engine.commands.data_commands import data_commands
 from app.engine.commands.db_commands import db_commands
@@ -56,6 +59,51 @@ async def get_current_tenant(x_api_key: str = Header(..., alias="x-admin-token")
         raise HTTPException(status_code=403, detail="Invalid or expired API Key")
 
     return str(res[0])
+
+
+@app.websocket("/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    """
+    Real-time Event Stream.
+    Clients subscribe to their tenant's event channel via Redis Pub/Sub.
+    """
+    await websocket.accept()
+
+    # Validate token for WebSocket
+    try:
+        if token == settings.ADMIN_SECRET_TOKEN:
+            tenant_id = "00000000-0000-0000-0000-000000000000"
+        elif token == settings.REGISTRATION_TOKEN:
+            tenant_id = "REGISTRATION_MODE"
+        else:
+            from app.core.db import execute_raw
+
+            res = execute_raw(
+                "SELECT tenant_id FROM api_keys WHERE token = :token", {"token": token}
+            ).fetchone()
+            if not res:
+                await websocket.close(code=1008)
+                return
+            tenant_id = str(res[0])
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    pubsub = get_redis_pubsub()
+    channel = f"tenant_{tenant_id}_events"
+    pubsub.subscribe(channel)
+
+    try:
+        while True:
+            message = pubsub.get_message(ignore_subscribe_messages=True)
+            if message:
+                await websocket.send_text(message["data"])
+            await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        pubsub.unsubscribe(channel)
+    except Exception:
+        pubsub.unsubscribe(channel)
+        await websocket.close()
 
 
 @app.get("/")
