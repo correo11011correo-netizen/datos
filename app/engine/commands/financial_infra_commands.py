@@ -80,7 +80,7 @@ class FinancialInfraCommandHandler:
 
             res = data_commands.insert_data(session, context, entity="transactions", data=data)
             return (
-                res if res.success else ServiceResponse.error_res(res.error, "TRANS_CREATE_ERROR")
+                res if res.success else ServiceResponse.error_res(res.message, "TRANS_CREATE_ERROR")
             )
         except Exception as e:
             return ServiceResponse.error_res(f"Transaction error: {str(e)}", "TRANS_CREATE_ERROR")

@@ -24,12 +24,15 @@ class DataCommandHandler:
     @command(
         name="data.upsert",
         description=(
-            "Creates or updates a record in a generic entity. Validates entity existence in the blueprint."
+            "Creates or updates a record in a generic entity. "
+            "Supports updates via primary ID or a unique key in the data."
         ),
         params_model={
             "entity": "str",
             "data": "dict",
             "id": "str (optional)",
+            "unique_key": "str (optional)",
+            "unique_value": "any (optional)",
         },
     )
     def upsert(
@@ -39,6 +42,8 @@ class DataCommandHandler:
         entity: str,
         data: dict,
         id: str | None = None,
+        unique_key: str | None = None,
+        unique_value: Any | None = None,
     ) -> ServiceResponse:
         try:
             # 1. Validar que la entidad exista en el mapa del desarrollador
@@ -49,7 +54,26 @@ class DataCommandHandler:
                     "BLUEPRINT_ENTITY_NOT_FOUND",
                 )
 
-            if id:
+            # --- Resolve Identity ---
+            target_id = id
+            if not target_id and unique_key and unique_value is not None:
+                # Search for the record ID using the unique key in JSONB
+                unique_filter = {unique_key: unique_value}
+                res = session.execute(
+                    text("""
+                        SELECT id FROM generic_data 
+                        WHERE tenant_id = :tid AND entity_type = :entity AND data @> :filter 
+                        LIMIT 1
+                    """),
+                    {
+                        "tid": context.tenant_id,
+                        "entity": entity,
+                        "filter": json.dumps(unique_filter),
+                    },
+                ).scalar()
+                target_id = res
+
+            if target_id:
                 # Actualización (Merge JSONB)
                 session.execute(
                     text("""
@@ -59,7 +83,7 @@ class DataCommandHandler:
                     """),
                     {
                         "new_data": json.dumps(data),
-                        "id": id,
+                        "id": target_id,
                         "tid": context.tenant_id,
                         "entity": entity,
                     },
@@ -85,7 +109,9 @@ class DataCommandHandler:
 
     @command(
         name="data.operate",
-        description="Executes a dynamic operation (sum, subtract, etc.) defined in the Blueprint map.",
+        description=(
+            "Executes a dynamic operation (sum, subtract, etc.) " "defined in the Blueprint map."
+        ),
         params_model={
             "entity": "str",
             "id": "str",
@@ -123,7 +149,8 @@ class DataCommandHandler:
 
             if not success:
                 return ServiceResponse.error_res(
-                    f"Operation '{operation}' failed or is not defined in the map for entity '{entity}'.",
+                    f"Operation '{operation}' failed or is not "
+                    f"defined in the map for entity '{entity}'.",
                     "OPERATION_FAILED",
                 )
 
