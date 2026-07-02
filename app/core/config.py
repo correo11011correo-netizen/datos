@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     # Admin Security
     ADMIN_SECRET_TOKEN: str = "super-secret-admin-token"
+    REGISTRATION_TOKEN: str = "dev-registration-token-2026"
 
     # App Config
     APP_NAME: str = "Generic-DB-Sentinel"

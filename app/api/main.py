@@ -38,6 +38,9 @@ async def get_current_tenant(x_api_key: str = Header(..., alias="x-admin-token")
     if x_api_key == settings.ADMIN_SECRET_TOKEN:
         return "00000000-0000-0000-0000-000000000000"
 
+    if x_api_key == settings.REGISTRATION_TOKEN:
+        return "REGISTRATION_MODE"
+
     from app.core.db import execute_raw
 
     try:

@@ -78,20 +78,37 @@ class CommandDispatcher:
 
         # Root tenant (00000000...) has absolute power
         is_root = tenant_id == "00000000-0000-0000-0000-000000000000"
+        is_registration = tenant_id == "REGISTRATION_MODE"
 
         if required_level == "SYSTEM" and not is_root:
+            # Special case: allow registration token for workspace setup
+            if is_registration and cmd_name == "dev.setup.workspace":
+                pass
+            else:
+                raise ValueError(
+                    json.dumps(
+                        {
+                            "error": "INSUFFICIENT_PERMISSIONS",
+                            "message": (
+                                f"The command '{cmd_name}' is a system-level operation "
+                                "and is restricted to the root administrator."
+                            ),
+                            "hint": (
+                                "You cannot execute infrastructure commands "
+                                "(like formatting or seeding) using a tenant API key."
+                            ),
+                            "example": None,
+                        }
+                    )
+                )
+
+        if is_registration and cmd_name != "dev.setup.workspace":
             raise ValueError(
                 json.dumps(
                     {
                         "error": "INSUFFICIENT_PERMISSIONS",
-                        "message": (
-                            f"The command '{cmd_name}' is a system-level operation "
-                            "and is restricted to the root administrator."
-                        ),
-                        "hint": (
-                            "You cannot execute infrastructure commands "
-                            "(like formatting or seeding) using a tenant API key."
-                        ),
+                        "message": "Registration token can only be used for 'dev.setup.workspace'.",
+                        "hint": "Once you have your own token, use it for all other operations.",
                         "example": None,
                     }
                 )

@@ -9,18 +9,18 @@ Bienvenido a la documentación técnica de **DB-Sentinel**. Este sistema impleme
 Este es el flujo moderno de auto-servicio. Permite crear una "oficina privada" aislada y configurarla totalmente sin intervención del administrador.
 
 ### Paso 1: Crear tu Espacio de Trabajo (Bootstrapping)
-Ejecuta este comando una sola vez para generar tu identidad en el sistema. El sistema creará automáticamente tu Tenant, un Token API único y un Blueprint vacío.
+Ejecuta este comando una sola vez para generar tu identidad en el sistema. El sistema creará automáticamente tu Tenant, un Token API único y un Blueprint vacío. Para esto, usarás la **Llave de Registro** (Registration Token) proporcionada por el equipo de infraestructura.
 
 ```bash
 curl -X POST "https://api.sentinel.io/exec?cmd=dev.setup.workspace" 
-     -H "x-admin-token: ADMIN_SECRET_TOKEN" 
+     -H "x-admin-token: REGISTRATION_TOKEN" 
      -H "Content-Type: application/json" 
      -d '{
        "developer_name": "TuNombre",
        "workspace_name": "MiProyectoPrivado"
      }'
 ```
-**⚠️ Importante:** Guarda el `api_token` resultante. A partir de ahora, **ya no usarás el token de administrador**, sino tu propio token en el header `x-admin-token`.
+**⚠️ Importante:** Recibirás un `api_token` único. **Guarda este token muy bien**. A partir de este momento, la Llave de Registro deja de ser útil para ti y debes usar únicamente tu token personal en el header `x-admin-token` para todas las operaciones.
 
 ### Paso 2: Organizar tu Oficina (Definir el Blueprint)
 Usa tu nuevo token para definir qué entidades existen en tu base de datos y qué operaciones pueden hacer.
@@ -129,7 +129,7 @@ Toda la potencia del sistema se accede a través de un único punto.
 ### Catálogo de Comandos
 
 #### 🛠️ `dev.*` (Configuración y Mapas)
-- `dev.setup.workspace`: Crea Tenant $ightarrow$ Token $ightarrow$ Blueprint.
+ightarrow$ Blueprint.
 - `dev.blueprint.define`: Define la estructura de datos y operaciones.
 - `dev.blueprint.list`: Lista los mapas disponibles.
 
