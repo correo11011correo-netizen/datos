@@ -79,7 +79,7 @@ class CommandDispatcher:
 
         # Root tenant (00000000...) has absolute power
         is_root = tenant_id == "00000000-0000-0000-0000-000000000000"
-        is_registration = tenant_id == "REGISTRATION_MODE"
+        is_registration = tenant_id in ("REGISTRATION_MODE", "ANONYMOUS_REGISTRATION")
 
         if required_level == "SYSTEM" and not is_root:
             # Special case: allow registration token for workspace setup
