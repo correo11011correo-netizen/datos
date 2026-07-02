@@ -69,6 +69,7 @@ function showModule(moduleId) {
     if (moduleId === 'users') loadTenants();
     if (moduleId === 'reports') loadGlobalReports();
     if (moduleId === 'metrics') loadSystemMetrics();
+    if (moduleId === 'entities') loadExplorerTenants();
 }
 
 // --- LOGIN / LOGOUT ---
@@ -98,12 +99,12 @@ function handleLogout() {
 // --- MÓDULO USUARIOS (TENANTS) ---
 async function loadTenants() {
     try {
-        const res = await apiRequest('/exec?cmd=list_tenants', 'POST', {});
+        const res = await apiRequest('/exec?cmd=system.tenant.list', 'POST', {});
         const body = document.getElementById('tenants-body');
         if (!body) return;
         body.innerHTML = '';
 
-        if (res.result && Array.isArray(res.result)) {
+        if (res.status === 'success' && Array.isArray(res.result)) {
             res.result.forEach(t => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -124,17 +125,14 @@ async function openTenantDetail(tid, name) {
     detailView.classList.remove('hidden');
     document.getElementById('detail-tenant-name').innerText = `Tenant: ${name}`;
 
-    // 1. Cargar Blueprint
     try {
         const bpRes = await apiRequest('/exec?cmd=dev.blueprint.list', 'POST', {});
-        const bp = bpRes.result.find(b => b.id === 'some_id'); // Simplified for this demo
-        document.getElementById('detail-blueprint-content').innerText = JSON.stringify(bp || {info: 'No BP found'}, null, 2);
+        document.getElementById('detail-blueprint-content').innerText = JSON.stringify(bpRes.result || [], null, 2);
     } catch (e) { document.getElementById('detail-blueprint-content').innerText = 'Error loading BP'; }
 
-    // 2. Cargar Reportes del Tenant
     try {
         const repRes = await apiRequest('/exec?cmd=system.report.list', 'POST', {});
-        const filtered = repRes.result.filter(r => r.tenant_id === tid);
+        const filtered = (repRes.result || []).filter(r => r.tenant_id === tid);
         const repDiv = document.getElementById('detail-reports-content');
         repDiv.innerHTML = filtered.map(r => `
             <div class="report-item ${r.category.toLowerCase()}">
@@ -144,13 +142,133 @@ async function openTenantDetail(tid, name) {
         `).join('') || 'Sin reportes';
     } catch (e) { document.getElementById('detail-reports-content').innerText = 'Error loading reports'; }
 
-    // 3. Métricas de almacenamiento (Simuladas)
     document.getElementById('detail-storage-content').innerText = (Math.random() * 100).toFixed(2) + " MB used";
 }
 
 function closeTenantDetail() {
     document.getElementById('tenant-detail-view').classList.add('hidden');
     document.getElementById('tenants-main-view').classList.remove('hidden');
+}
+
+// --- EXPLORADOR DE DATOS (ENTIDADES) ---
+async function loadExplorerTenants() {
+    try {
+        const res = await apiRequest('/exec?cmd=system.tenant.list', 'POST', {});
+        const list = document.getElementById('entity-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (res.status === 'success' && Array.isArray(res.result)) {
+            res.result.forEach(t => {
+                const item = document.createElement('div');
+                item.className = 'entity-item';
+                item.innerHTML = `<span>🏢</span> <span>${t.name}</span>`;
+                item.onclick = () => selectTenant(t.id, t.name, item);
+                list.appendChild(item);
+            });
+        }
+    } catch (e) { notify(e.message, 'error'); }
+}
+
+async function selectTenant(tenantId, tenantName, element) {
+    document.querySelectorAll('.entity-item').forEach(i => i.classList.remove('active'));
+    element.classList.add('active');
+
+    const list = document.getElementById('entity-list');
+    // We keep the list but we could add a "Back" button. 
+    // For now, we just fetch the entities for this tenant.
+    
+    try {
+        const res = await apiRequest('/exec?cmd=system.tenant.entities', 'POST', { tenant_id: tenantId });
+        if (res.status === 'success' && Array.isArray(res.result)) {
+            // If we want to show entities in the same sidebar, we could replace content.
+            // Instead, let's use a simple prompt or just list them in the main viewer as a starting point.
+            // To maintain the previous UX, we'll render the entities as a table in the main viewer.
+            showEntityList(tenantId, tenantName, res.result);
+        }
+    } catch (e) { notify(e.message, 'error'); }
+}
+
+function showEntityList(tenantId, tenantName, entities) {
+    document.getElementById('empty-state').classList.add('hidden');
+    const viewer = document.getElementById('data-viewer');
+    viewer.classList.remove('hidden');
+    document.getElementById('current-entity-title').querySelector('span').innerText = `Tenants: ${tenantName}`;
+    
+    const data = entities.map(ent => ({ entity: ent }));
+    renderTable(data, 'table-head', 'table-body', (row) => {
+        const entityName = row.entity;
+        selectEntity(entityName, tenantId);
+    });
+}
+
+async function createEntity() {
+    const name = document.getElementById('entity-name').value;
+    if (!name) return notify('Escribe el nombre del tenant', 'error');
+    try {
+        const res = await apiRequest('/exec?cmd=system.tenant.create', 'POST', { name });
+        if (res.status === 'success') {
+            notify(`Tenant ${name} creado. Key: ${res.result.api_key}`, 'success');
+            document.getElementById('entity-name').value = '';
+            loadExplorerTenants();
+        } else {
+            throw new Error(res.message);
+        }
+    } catch (e) {
+        notify(`Error al crear tenant: ${e.message}`, 'error');
+    }
+}
+
+async function selectEntity(entityName, tenantId) {
+    document.getElementById('current-entity-title').querySelector('span').innerText = entityName;
+    try {
+        const res = await apiRequest('/exec?cmd=data.query', 'POST', { 
+            entity: entityName,
+            impersonate_tid: tenantId 
+        });
+        if (res.status === 'success' && Array.isArray(res.result)) {
+            renderTable(res.result, 'table-head', 'table-body');
+        }
+    } catch (e) { notify(e.message, 'error'); }
+}
+
+function renderTable(data, headId, bodyId, onRowClick = null) {
+    const head = document.getElementById(headId);
+    const body = document.getElementById(bodyId);
+    if (!head || !body) return;
+
+    head.innerHTML = '';
+    body.innerHTML = '';
+
+    if (!data || data.length === 0) {
+        body.innerHTML = '<tr><td colspan="10" style="text-align:center">No hay datos disponibles</td></tr>';
+        return;
+    }
+
+    const keys = Object.keys(data[0]);
+    keys.forEach(k => {
+        const th = document.createElement('th');
+        th.innerText = k;
+        head.appendChild(th);
+    });
+
+    data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = onRowClick ? 'pointer' : 'default';
+        if (onRowClick) tr.onclick = () => onRowClick(row);
+        
+        keys.forEach(k => {
+            const td = document.createElement('td');
+            td.innerText = typeof row[k] === 'object' ? JSON.stringify(row[k]) : row[k];
+            tr.appendChild(td);
+        });
+        body.appendChild(tr);
+    });
+}
+
+function closeViewer() {
+    document.getElementById('data-viewer').classList.add('hidden');
+    document.getElementById('empty-state').classList.remove('hidden');
 }
 
 // --- MÓDULO SOPORTE (REPORTES) ---
@@ -161,7 +279,7 @@ async function loadGlobalReports() {
         if (!body) return;
         body.innerHTML = '';
 
-        if (res.result && Array.isArray(res.result)) {
+        if (res.status === 'success' && Array.isArray(res.result)) {
             res.result.forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -180,7 +298,6 @@ async function loadGlobalReports() {
 // --- MÓDULO MÉTRICAS ---
 async function loadSystemMetrics() {
     try {
-        // Simulación de métricas ya que no hay endpoint de sistema avanzado aún
         document.getElementById('met-total-tenants').innerText = '12';
         document.getElementById('met-total-storage').innerText = '1.4 GB';
         document.getElementById('met-events-rate').innerText = '45 req/s';
@@ -190,10 +307,17 @@ async function loadSystemMetrics() {
 
 // --- INFRAESTRUCTURA ---
 async function runCmd(cmd) {
+    // Map legacy frontend commands to new backend system commands
+    const cmdMap = {
+        'init_system': 'system.init_infra',
+        'format_all': 'system.db.format'
+    };
+    const finalCmd = cmdMap[cmd] || cmd;
+
     try {
-        const res = await apiRequest(`/exec?cmd=${cmd}`, 'POST', {});
+        const res = await apiRequest(`/exec?cmd=${finalCmd}`, 'POST', {});
         notify(res.message || 'Ejecutado', 'success');
-        if (cmd === 'init_system') loadTenants();
+        if (finalCmd === 'system.init_infra') loadTenants();
     } catch (e) { notify(e.message, 'error'); }
 }
 

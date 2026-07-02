@@ -21,6 +21,27 @@ class DataCommandHandler:
     siguiendo el Blueprint asignado al Tenant.
     """
 
+    def _get_effective_tid(self, context: TenantContext, params: dict) -> str:
+        """
+        Determines the tenant ID to use for the operation.
+        If impersonate_tid is provided and the current user is root, it uses that.
+        """
+        impersonate_tid = params.get("impersonate_tid")
+        if impersonate_tid:
+            if context.tenant_id == "00000000-0000-0000-0000-000000000000":
+                return impersonate_tid
+            # If not root, impersonation is forbidden
+            raise ValueError(
+                json.dumps(
+                    {
+                        "error": "FORBIDDEN",
+                        "message": "Impersonation is restricted to system administrators.",
+                        "hint": "Use your own API key for your tenant's data.",
+                    }
+                )
+            )
+        return context.tenant_id
+
     @command(
         name="data.upsert",
         description=(
@@ -33,6 +54,7 @@ class DataCommandHandler:
             "id": "str (optional)",
             "unique_key": "str (optional)",
             "unique_value": "any (optional)",
+            "impersonate_tid": "str (optional)",
         },
     )
     def upsert(
@@ -44,13 +66,17 @@ class DataCommandHandler:
         id: str | None = None,
         unique_key: str | None = None,
         unique_value: Any | None = None,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
+
             # 1. Validar que la entidad exista en el mapa del desarrollador
-            blueprint = blueprint_manager.get_blueprint_for_tenant(session, context.tenant_id)
+            blueprint = blueprint_manager.get_blueprint_for_tenant(session, tid)
             if not blueprint or entity not in blueprint.get("entities", {}):
                 return ServiceResponse.error_res(
-                    f"Entity '{entity}' is not defined in the assigned Blueprint.",
+                    f"Entity '{entity}' is not defined in the assigned Blueprint for tenant {tid}.",
                     "BLUEPRINT_ENTITY_NOT_FOUND",
                 )
 
@@ -66,7 +92,7 @@ class DataCommandHandler:
                         LIMIT 1
                     """),
                     {
-                        "tid": context.tenant_id,
+                        "tid": tid,
                         "entity": entity,
                         "filter": json.dumps(unique_filter),
                     },
@@ -84,7 +110,7 @@ class DataCommandHandler:
                     {
                         "new_data": json.dumps(data),
                         "id": target_id,
-                        "tid": context.tenant_id,
+                        "tid": tid,
                         "entity": entity,
                     },
                 )
@@ -95,12 +121,12 @@ class DataCommandHandler:
                         INSERT INTO generic_data (tenant_id, entity_type, data) 
                         VALUES (:tid, :entity, :data)
                     """),
-                    {"tid": context.tenant_id, "entity": entity, "data": json.dumps(data)},
+                    {"tid": tid, "entity": entity, "data": json.dumps(data)},
                 )
 
             session.commit()
             return ServiceResponse.success_res(
-                message=f"Record in '{entity}' synchronized successfully."
+                message=f"Record in '{entity}' synchronized successfully for tenant {tid}."
             )
         except Exception as e:
             session.rollback()
@@ -117,6 +143,7 @@ class DataCommandHandler:
             "id": "str",
             "operation": "str",
             "value": "float",
+            "impersonate_tid": "str (optional)",
         },
     )
     def operate(
@@ -127,10 +154,14 @@ class DataCommandHandler:
         id: str,
         operation: str,
         value: float,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
+
             # 1. Recuperar el mapa del tenant
-            blueprint = blueprint_manager.get_blueprint_for_tenant(session, context.tenant_id)
+            blueprint = blueprint_manager.get_blueprint_for_tenant(session, tid)
             if not blueprint:
                 return ServiceResponse.error_res(
                     "No Blueprint assigned to this tenant.", "BLUEPRINT_NOT_FOUND"
@@ -139,7 +170,7 @@ class DataCommandHandler:
             # 2. Ejecutar la operación mediante el MapExecutor
             success = map_executor.execute_operation(
                 session=session,
-                tenant_id=context.tenant_id,
+                tenant_id=tid,
                 entity_type=entity,
                 record_id=id,
                 operation_name=operation,
@@ -155,7 +186,7 @@ class DataCommandHandler:
                 )
 
             return ServiceResponse.success_res(
-                message=f"Operation '{operation}' executed successfully."
+                message=f"Operation '{operation}' executed successfully for tenant {tid}."
             )
         except Exception as e:
             session.rollback()
@@ -168,19 +199,27 @@ class DataCommandHandler:
         params_model={
             "entity": "str",
             "id": "str",
+            "impersonate_tid": "str (optional)",
         },
     )
     def get_record(
-        self, session: Session, context: TenantContext, entity: str, id: str
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        id: str,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
             result = (
                 session.execute(
                     text("""
                     SELECT data FROM generic_data 
                     WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
                 """),
-                    {"id": id, "tid": context.tenant_id, "entity": entity},
+                    {"id": id, "tid": tid, "entity": entity},
                 )
                 .mappings()
                 .first()
@@ -203,18 +242,26 @@ class DataCommandHandler:
         params_model={
             "entity": "str",
             "id": "str",
+            "impersonate_tid": "str (optional)",
         },
     )
     def delete_record(
-        self, session: Session, context: TenantContext, entity: str, id: str
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        id: str,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
             session.execute(
                 text("""
                     DELETE FROM generic_data 
                     WHERE id = :id AND tenant_id = :tid AND entity_type = :entity
                 """),
-                {"id": id, "tid": context.tenant_id, "entity": entity},
+                {"id": id, "tid": tid, "entity": entity},
             )
             session.commit()
             return ServiceResponse.success_res(message="Record deleted successfully.")
@@ -228,23 +275,31 @@ class DataCommandHandler:
         params_model={
             "entity": "str",
             "filters": "dict (optional)",
+            "impersonate_tid": "str (optional)",
         },
     )
     def query_data(
-        self, session: Session, context: TenantContext, entity: str, filters: dict | None = None
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        filters: dict | None = None,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
             query_str = """
                 SELECT id, data FROM generic_data 
                 WHERE tenant_id = :tid AND entity_type = :entity
             """
-            params = {"tid": context.tenant_id, "entity": entity}
+            db_params = {"tid": tid, "entity": entity}
 
             if filters:
                 query_str += " AND data @> :filters"
-                params["filters"] = json.dumps(filters)
+                db_params["filters"] = json.dumps(filters)
 
-            result = session.execute(text(query_str), params).mappings().all()
+            result = session.execute(text(query_str), db_params).mappings().all()
 
             data = []
             for row in result:
@@ -269,6 +324,7 @@ class DataCommandHandler:
             "filters": "dict (optional)",
             "page": "int (default 1)",
             "page_size": "int (default 20)",
+            "impersonate_tid": "str (optional)",
         },
     )
     def list_data(
@@ -279,25 +335,28 @@ class DataCommandHandler:
         filters: dict | None = None,
         page: int = 1,
         page_size: int = 20,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
             offset = (page - 1) * page_size
 
             query_str = """
                 SELECT id, data FROM generic_data 
                 WHERE tenant_id = :tid AND entity_type = :entity
             """
-            params: dict[str, Any] = {"tid": context.tenant_id, "entity": entity}
+            db_params: dict[str, Any] = {"tid": tid, "entity": entity}
 
             if filters:
                 query_str += " AND data @> :filters"
-                params["filters"] = json.dumps(filters)
+                db_params["filters"] = json.dumps(filters)
 
             query_str += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
-            params["limit"] = page_size
-            params["offset"] = offset
+            db_params["limit"] = page_size
+            db_params["offset"] = offset
 
-            result = session.execute(text(query_str), params).mappings().all()
+            result = session.execute(text(query_str), db_params).mappings().all()
 
             data = []
             for row in result:
@@ -317,36 +376,37 @@ class DataCommandHandler:
     @command(
         name="data.count",
         description="Counts the number of records in a generic entity with optional filters.",
-        params_model={"entity": "str", "filters": "dict (optional)"},
+        params_model={
+            "entity": "str",
+            "filters": "dict (optional)",
+            "impersonate_tid": "str (optional)",
+        },
     )
     def count_records(
-        self, session: Session, context: TenantContext, entity: str, filters: dict | None = None
+        self,
+        session: Session,
+        context: TenantContext,
+        entity: str,
+        filters: dict | None = None,
+        impersonate_tid: str | None = None,
     ) -> ServiceResponse:
         try:
+            params = {"impersonate_tid": impersonate_tid}
+            tid = self._get_effective_tid(context, params)
             query_str = (
                 "SELECT count(*) as total FROM generic_data "
                 "WHERE tenant_id = :tid AND entity_type = :entity"
             )
-            params = {"tid": context.tenant_id, "entity": entity}
+            db_params = {"tid": tid, "entity": entity}
 
             if filters:
                 query_str += " AND data @> :filters"
-                params["filters"] = json.dumps(filters)
+                db_params["filters"] = json.dumps(filters)
 
-            result = session.execute(text(query_str), params).scalar()
+            result = session.execute(text(query_str), db_params).scalar()
             return ServiceResponse.success_res(data={"total": result})
         except Exception as e:
             return ServiceResponse.error_res(f"Count error: {str(e)}", "DATA_COUNT_ERROR")
-
-    # --- Compatibilidad con versiones anteriores ---
-    def upsert_record(self, *args, **kwargs):
-        return self.upsert(*args, **kwargs)
-
-    def insert_data(self, session, context, entity, data):
-        return self.upsert(session, context, entity, data)
-
-    def patch_record(self, session, context, entity, id, updates):
-        return self.upsert(session, context, entity, updates, id=id)
 
 
 data_commands = DataCommandHandler()
