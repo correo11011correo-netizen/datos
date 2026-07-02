@@ -115,7 +115,7 @@ class CommandDispatcher:
             )
 
         # --- Plan-Based Access Control (PBAC) ---
-        if not is_root:
+        if not is_root and not is_registration:
             # Basic hierarchy: free < pro < enterprise
             plan_hierarchy = {"free": 0, "pro": 1, "enterprise": 2}
 
