@@ -34,7 +34,7 @@ dispatcher.register_handler(dev_self_service_commands)
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 
-async def get_current_tenant(x_api_key: str = Header(..., alias="x-admin-token")):
+async def get_current_tenant(x_api_key: str | None = Header(None, alias="x-admin-token")):
     """
     Self-Teaching Security: Validates the token.
     """
@@ -43,6 +43,9 @@ async def get_current_tenant(x_api_key: str = Header(..., alias="x-admin-token")
 
     if x_api_key == settings.REGISTRATION_TOKEN:
         return "REGISTRATION_MODE"
+
+    if x_api_key is None:
+        return "ANONYMOUS_REGISTRATION"
 
     from app.core.db import execute_raw
 
@@ -171,6 +174,13 @@ def _parse_dispatcher_error(e: Exception):
 @app.post("/exec")
 async def execute_command(request: Request, cmd: str, tenant_id: str = Depends(get_current_tenant)):
     try:
+        # --- Anonymous Access Control ---
+        if tenant_id == "ANONYMOUS_REGISTRATION" and cmd != "dev.setup.workspace":
+            _raise_http_exception(
+                403,
+                "Authentication required. Use 'dev.setup.workspace' " "to create your own account.",
+            )
+
         body = await request.body()
         params = {}
         if body:

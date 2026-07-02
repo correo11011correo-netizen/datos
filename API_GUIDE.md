@@ -6,24 +6,24 @@ Bienvenido a la documentación técnica de **DB-Sentinel**. Este sistema impleme
 
 ## 🚀 Guía de Inicio Rápido: El "Camino del Desarrollador"
 
-Este es el flujo moderno de auto-servicio. Permite crear una "oficina privada" aislada y configurarla totalmente sin intervención del administrador.
+Este es el flujo moderno de auto-servicio. Permite crear una "oficina privada" aislada y configurarla totalmente sin intervención del administrador y sin necesidad de tokens previos.
 
 ### Paso 1: Crear tu Espacio de Trabajo (Bootstrapping)
-Ejecuta este comando una sola vez para generar tu identidad en el sistema. El sistema creará automáticamente tu Tenant, un Token API único y un Blueprint vacío. Para esto, usarás la **Llave de Registro** (Registration Token) proporcionada por el equipo de infraestructura.
+Ejecuta este comando una sola vez para generar tu identidad en el sistema. El sistema creará automáticamente tu Tenant, un Token API único y un Blueprint vacío. **Este paso es abierto y no requiere autenticación.**
 
 ```bash
 curl -X POST "https://api.sentinel.io/exec?cmd=dev.setup.workspace" 
-     -H "x-admin-token: REGISTRATION_TOKEN" 
      -H "Content-Type: application/json" 
      -d '{
        "developer_name": "TuNombre",
        "workspace_name": "MiProyectoPrivado"
      }'
 ```
-**⚠️ Importante:** Recibirás un `api_token` único. **Guarda este token muy bien**. A partir de este momento, la Llave de Registro deja de ser útil para ti y debes usar únicamente tu token personal en el header `x-admin-token` para todas las operaciones.
+**⚠️ Importante:** Recibirás un `api_token` único. **Guarda este token muy bien**. A partir de este momento, este es tu identificador personal y debes usarlo en el header `x-admin-token` para todas las operaciones posteriores.
 
 ### Paso 2: Organizar tu Oficina (Definir el Blueprint)
 Usa tu nuevo token para definir qué entidades existen en tu base de datos y qué operaciones pueden hacer.
+...
 
 ```bash
 curl -X POST "https://api.sentinel.io/exec?cmd=dev.blueprint.define" 
