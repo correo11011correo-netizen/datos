@@ -99,7 +99,48 @@ curl -X POST "https://api.sentinel.io/exec?cmd=system.init_infra"
 
 ---
 
+## ⚖️ Términos de Uso y Responsabilidad
+
+**DB-Sentinel es un Proveedor de Infraestructura de Datos (Data-as-a-Service), NO un proveedor de lógica de negocio.**
+
+Para garantizar la estabilidad del sistema, es fundamental comprender la división de responsabilidades:
+
+1.  **Nuestra Responsabilidad (Infraestructura):** Garantizamos que los comandos de datos (`data.*`), la gestión de Blueprints (`dev.*`) y el sistema de autenticación funcionen correctamente. Si un comando de infraestructura falla o devuelve un error de sistema (ej: `INTERNAL_ERROR`, `DATABASE_CONNECTION_FAILURE`), es nuestra responsabilidad corregirlo.
+2.  **Tu Responsabilidad (Lógica de Negocio):** Tú defines el Blueprint y cómo se usan los datos. Si el resultado de una operación es incorrecto debido a una mala definición del mapa, una ruta de almacenamiento errónea o un flujo de negocio mal diseñado, **esto no es un fallo del sistema, sino un error de implementación del desarrollador**.
+
+**⚠️ Política de Reportes:**
+Solo se aceptarán reportes de errores que afecten la **infraestructura**. No se procesarán quejas sobre comportamientos de lógica de negocio que dependan de la configuración del Blueprint del Tenant.
+
+---
+
+## 🚩 Sistema de Reportes Técnicos
+
+Si detectas un bug real en la infraestructura (un error 500, un TypeError en el core, o un fallo en los comandos `data.*`), puedes notificarlo directamente al administrador.
+
+### Comando: `dev.report.submit`
+Permite enviar un reporte técnico vinculado a tu Tenant.
+
+**Parámetros:**
+- `category`: `"BUG"`, `"IMPROVEMENT"`, o `"CRITICAL"`.
+- `title`: Título breve del problema.
+- `description`: Detalle técnico, pasos para reproducir y el error recibido.
+
+**Ejemplo de uso:**
+```bash
+curl -X POST "https://api.sentinel.io/exec?cmd=dev.report.submit" 
+     -H "x-admin-token: TU_TOKEN" 
+     -H "Content-Type: application/json" 
+     -d '{
+       "category": "BUG",
+       "title": "Error de UUID en upsert",
+       "description": "Al usar un identifier personalizado, el sistema lanza un error de sintaxis de UUID en PostgreSQL."
+     }'
+```
+
+---
+
 ## 📖 Conceptos Core
+
 
 ### 🧩 ¿Qué es un Blueprint?
 A diferencia de las bases de datos SQL tradicionales, DB-Sentinel no tiene esquemas fijos. Un **Blueprint** es un archivo JSONB que actúa como el "Manual de Instrucciones" para un Tenant.

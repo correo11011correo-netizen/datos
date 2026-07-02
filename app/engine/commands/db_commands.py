@@ -52,6 +52,14 @@ class DBCommandHandler:
                     "(id SERIAL PRIMARY KEY, command TEXT, params JSONB, "
                     "executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
                 ),
+                "dev_reports": (
+                    "CREATE TABLE IF NOT EXISTS dev_reports "
+                    "(id SERIAL PRIMARY KEY, "
+                    "tenant_id UUID REFERENCES tenants(id), "
+                    "category TEXT, title TEXT, description TEXT, "
+                    "status TEXT DEFAULT 'open', "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                ),
             }
 
             for sql in core_tables.values():
@@ -60,7 +68,8 @@ class DBCommandHandler:
             # Ensure tenants table has blueprint_id if it already existed
             session.execute(
                 text(
-                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS blueprint_id UUID REFERENCES system_blueprints(id)"
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "
+                    "blueprint_id UUID REFERENCES system_blueprints(id)"
                 )
             )
 
@@ -87,7 +96,10 @@ class DBCommandHandler:
 
             session.commit()
             return ServiceResponse.success_res(
-                message="Infrastructure initialized with Blueprint support. Universal data store ready."
+                message=(
+                    "Infrastructure initialized with Blueprint support. "
+                    "Universal data store ready."
+                )
             )
         except Exception as e:
             session.rollback()

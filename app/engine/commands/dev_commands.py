@@ -57,6 +57,11 @@ class DevCommandHandler:
                 {"map": json.dumps(map_definition), "dev": developer_name, "id": bp_id},
             )
 
+            # Clear cache to ensure the new blueprint is used immediately
+            from app.core.blueprints import blueprint_manager
+
+            blueprint_manager.clear_cache(context.tenant_id)
+
             session.commit()
             return ServiceResponse.success_res(
                 message=f"Blueprint for tenant {context.tenant_id} updated successfully."
