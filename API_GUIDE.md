@@ -117,6 +117,28 @@ El sistema utiliza un único header para todas las solicitudes: `x-admin-token`.
 
 ---
 
+## ⚡ Tiempo Real con WebSockets (Real-Time)
+
+Para que tu aplicación se sienta "viva" (como un chat o una plataforma de trading), DB-Sentinel incluye un motor de eventos basado en Redis. Cada vez que se ejecuta un comando de datos (`data.*`), el sistema dispara una notificación instantánea.
+
+### Cómo conectarse al flujo de eventos
+Puedes abrir una conexión WebSocket para recibir avisos en tiempo real sobre cualquier cambio en tu espacio de trabajo.
+
+- **URL**: `wss://<tu-dominio>/ws/{tu_api_token}`
+- **Funcionamiento**: Una vez conectado, el servidor te enviará un mensaje JSON cada vez que ocurra una actualización en tu tenant.
+
+**Ejemplo de evento recibido:**
+```json
+{
+  "command": "data.operate",
+  "params": { "entity": "wallet", "operation": "add_funds", "value": 50.0 },
+  "status": "success"
+}
+```
+*Con esto, tu frontend puede actualizar el saldo o mostrar un mensaje de "Nuevo mensaje recibido" instantáneamente.*
+
+---
+
 ## 🔌 Referencia de la API
 
 ### Endpoint Maestro: `/exec`
