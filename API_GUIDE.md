@@ -202,6 +202,7 @@ ightarrow$ Blueprint.
 - `data.query`: Busca registros usando filtros JSONB.
 - `data.operate`: Ejecuta una operación dinámica definida en el mapa.
 - `data.delete`: Elimina un registro.
+- `dev.cache.clear`: Fuerza la actualización del Blueprint desde la base de datos (limpia la caché).
 
 #### 💰 `plan.*` y `fin.*` (Negocio y Finanzas)
 - `plan.define` / `plan.set`: Gestión de niveles de suscripción.

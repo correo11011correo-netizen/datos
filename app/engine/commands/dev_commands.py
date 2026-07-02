@@ -152,5 +152,29 @@ class DevCommandHandler:
             logger.exception("Error listing blueprints")
             return ServiceResponse.error_res(f"List error: {str(e)}", "BLUEPRINT_LIST_ERROR")
 
+    @command(
+        name="dev.cache.clear",
+        description=(
+            "Clears the blueprint cache for the current tenant "
+            "to force a refresh from the database."
+        ),
+        params_model={},
+        required_level="TENANT",
+    )
+    def clear_tenant_cache(self, session: Session, context: TenantContext) -> ServiceResponse:
+        try:
+            from app.core.blueprints import blueprint_manager
+
+            blueprint_manager.clear_cache(context.tenant_id)
+            return ServiceResponse.success_res(
+                message=(
+                    f"Blueprint cache cleared for tenant {context.tenant_id}. "
+                    "New changes will be applied."
+                )
+            )
+        except Exception as e:
+            logger.exception("Error clearing cache")
+            return ServiceResponse.error_res(f"Cache error: {str(e)}", "CACHE_CLEAR_ERROR")
+
 
 dev_commands = DevCommandHandler()
