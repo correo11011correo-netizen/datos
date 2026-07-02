@@ -51,14 +51,19 @@
                             <span class="nav-label">SISTEMA</span>
                             <button onclick="showModule('infra')" class="nav-item active" id="nav-infra">🛠️ Infraestructura</button>
                             <button onclick="showModule('entities')" class="nav-item" id="nav-entities">📦 Gestor de Datos</button>
-                            <button onclick="showModule('users')" class="nav-item" id="nav-users">👥 Usuarios y Roles</button>
+                            <button onclick="showModule('users')" class="nav-item" id="nav-users">👥 Gestión de Tenants</button>
                         </div>
                         <div class="nav-section">
                             <span class="nav-label">SOPORTE</span>
+                            <button onclick="showModule('reports')" class="nav-item" id="nav-reports">🚩 Reportes Bugs</button>
+                            <button onclick="showModule('metrics')" class="nav-item" id="nav-metrics">📊 Métricas Uso</button>
+                        </div>
+                        <div class="nav-section">
+                            <span class="nav-label">SISTEMA</span>
                             <button onclick="handleLogout()" class="nav-item btn-logout">🚪 Salir</button>
                         </div>
                     </nav>
-                </aside>
+                </aside
 
                 <!-- CONTENIDO PRINCIPAL -->
                 <main class="main-content">
@@ -82,7 +87,7 @@
                         </div>
                     </div>
 
-                    <!-- MÓDULO GESTOR DE DATOS (RESPONSIVE EXPLORER) -->
+                    <!-- MÓDULO GESTOR DE DATOS -->
                     <div id="mod-entities" class="module hidden">
                         <header class="mod-header">
                             <h1>Explorador de Datos</h1>
@@ -127,49 +132,100 @@
                         </div>
                     </div>
 
-                    <!-- MÓDULO USUARIOS / IDENTIDADES -->
+                    <!-- MÓDULO USUARIOS / TENANTS -->
                     <div id="mod-users" class="module hidden">
                         <header class="mod-header">
-                            <h1>Centro de Identidades</h1>
-                            <p>Gestión de Tenants, Tokens y Permisos</p>
+                            <h1>Gestión de Tenants</h1>
+                            <p>Administración total de identidades y recursos</p>
                         </header>
-                        <div class="identity-grid">
-                            <div class="id-section">
-                                <div class="id-card">
-                                    <h3>Plataformas</h3>
-                                    <p>Tenants registrados en el sistema</p>
-                                    <button onclick="viewData('list_tenants')" class="btn btn-primary">Ver Tenants</button>
+                        <div id="tenants-main-view">
+                            <div class="users-grid">
+                                <div class="user-section">
+                                    <h3>Listado Maestro</h3>
+                                    <p>Todos los tenants registrados</p>
+                                    <button onclick="loadTenants()" class="btn btn-primary">Actualizar Lista</button>
                                 </div>
-                                <div class="id-card">
-                                    <h3>Acceso API</h3>
-                                    <p>Tokens activos y etiquetas</p>
-                                    <button onclick="viewData('list_api_keys')" class="btn btn-primary">Ver Tokens</button>
+                            </div>
+                            <div id="tenants-list-container" class="data-viewer">
+                                <table id="tenants-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Nombre</th>
+                                            <th>Plan</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tenants-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="tenant-detail-view" class="module hidden">
+                            <div class="detail-header">
+                                <button onclick="closeTenantDetail()" class="btn-back">← Volver</button>
+                                <h2 id="detail-tenant-name">Detalles del Tenant</h2>
+                            </div>
+                            <div class="detail-grid">
+                                <div class="detail-card">
+                                    <h3>🗺️ Blueprint</h3>
+                                    <div id="detail-blueprint-content" class="json-view">Cargando...</div>
                                 </div>
-                                <div class="id-card">
-                                    <h3>Staff Admin</h3>
-                                    <p>Usuarios con acceso raíz</p>
-                                    <button onclick="viewData('admins')" class="btn btn-primary">Ver Admins</button>
+                                <div class="detail-card">
+                                    <h3>🚩 Reportes Recibidos</h3>
+                                    <div id="detail-reports-content" class="reports-view">Cargando...</div>
                                 </div>
-                                <div class="id-card">
-                                    <h3>Jerarquía</h3>
-                                    <p>Roles y permisos asignados</p>
-                                    <button onclick="viewData('roles')" class="btn btn-primary">Ver Roles</button>
+                                <div class="detail-card">
+                                    <h3>💾 Almacenamiento</h3>
+                                    <div id="detail-storage-content" class="metrics-view">Calculando...</div>
                                 </div>
                             </div>
                         </div>
-                        <div id="user-data-viewer" class="data-viewer hidden">
-                            <div class="viewer-header">
-                                <div class="viewer-title">
-                                    <button onclick="closeUserViewer()" class="btn-back">←</button>
-                                    <h3 id="user-entity-title"><span>-</span></h3>
-                                </div>
-                                <button onclick="closeUserViewer()" class="btn btn-outline hide-mobile">Cerrar</button>
+                    </div>
+
+                    <!-- MÓDULO REPORTES (SOPORTE) -->
+                    <div id="mod-reports" class="module hidden">
+                        <header class="mod-header">
+                            <h1>Centro de Soporte</h1>
+                            <p>Gestión de Bugs y Mejoras de Infraestructura</p>
+                        </header>
+                        <div class="reports-container">
+                            <table id="global-reports-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tenant</th>
+                                        <th>Categoría</th>
+                                        <th>Título</th>
+                                        <th>Estado</th>
+                                        <th>Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="global-reports-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- MÓDULO MÉTRICAS -->
+                    <div id="mod-metrics" class="module hidden">
+                        <header class="mod-header">
+                            <h1>Métricas del Sistema</h1>
+                            <p>Consumo de recursos y salud del motor</p>
+                        </header>
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <span class="metric-label">Total Tenants</span>
+                                <span class="metric-value" id="met-total-tenants">-</span>
                             </div>
-                            <div id="user-data-table-container">
-                                <table id="user-data-table">
-                                    <thead><tr id="user-table-head"></tr></thead>
-                                    <tbody id="user-table-body"></tbody>
-                                </table>
+                            <div class="metric-card">
+                                <span class="metric-label">Datos Almacenados</span>
+                                <span class="metric-value" id="met-total-storage">-</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Eventos/seg</span>
+                                <span class="metric-value" id="met-events-rate">-</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Uptime Servidor</span>
+                                <span class="metric-value" id="met-uptime">-</span>
                             </div>
                         </div>
                     </div>
@@ -189,6 +245,10 @@
                         <span class="icon">👥</span>
                         <span class="label">Usuarios</span>
                     </button>
+                    <button onclick="showModule('reports')" class="nav-item-mobile" id="mob-nav-reports">
+                        <span class="icon">🚩</span>
+                        <span class="label">Bugs</span>
+                    </button>
                     <button onclick="handleLogout()" class="nav-item-mobile btn-logout">
                         <span class="icon">🚪</span>
                         <span class="label">Salir</span>
@@ -197,6 +257,6 @@
             </div>
         </div>
     </div>
-    <script src="/static/js/app.js?v=1.0.2"></script>
+    <script src="/static/js/app.js?v=1.0.3"></script>
 </body>
 </html>
