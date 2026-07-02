@@ -1,22 +1,23 @@
 import json
 import logging
-from typing import Any, Optional, Union
+
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
-from app.core.context import TenantContext
-
 logger = logging.getLogger("OmniCore.Blueprints")
+
 
 class InfrastructureNotInitializedError(Exception):
     """Raised when the required system tables (like system_blueprints) are missing."""
+
     pass
+
 
 class BlueprintManager:
     """
     Gestor de Mapas (Blueprints) del Sistema.
-    Se encarga de recuperar la definición de administración JSONB 
+    Se encarga de recuperar la definición de administración JSONB
     asignada a un tenant específico.
     """
 
@@ -24,7 +25,7 @@ class BlueprintManager:
         # Cache simple para evitar consultas repetitivas a la DB en el mismo request
         self._cache: dict[str, dict] = {}
 
-    def get_blueprint_for_tenant(self, session: Session, tenant_id: str) -> Optional[dict]:
+    def get_blueprint_for_tenant(self, session: Session, tenant_id: str) -> dict | None:
         """
         Recupera el mapa JSONB vinculado al tenant a través de su blueprint_id.
         """
@@ -53,18 +54,20 @@ class BlueprintManager:
         except ProgrammingError as e:
             if "system_blueprints" in str(e).lower():
                 logger.error("Blueprint table missing. Infrastructure initialization required.")
-                raise InfrastructureNotInitializedError("The 'system_blueprints' table does not exist. Please run 'system.init_infra'.")
+                raise InfrastructureNotInitializedError(
+                    "The 'system_blueprints' table does not exist. Please run 'system.init_infra'."
+                ) from e
             raise e
-        except Exception as e:
+        except Exception:
             logger.exception(f"Error retrieving blueprint for tenant {tenant_id}")
             return None
 
-    def clear_cache(self, tenant_id: Optional[str] = None):
+    def clear_cache(self, tenant_id: str | None = None):
         """Limpia la cache de mapas."""
         if tenant_id:
             self._cache.pop(tenant_id, None)
         else:
             self._cache.clear()
 
-blueprint_manager = BlueprintManager()
 
+blueprint_manager = BlueprintManager()

@@ -8,6 +8,7 @@ from app.engine.commands.chat_infra_commands import chat_infra_commands
 from app.engine.commands.data_commands import data_commands
 from app.engine.commands.db_commands import db_commands
 from app.engine.commands.dev_commands import dev_commands
+from app.engine.commands.dev_self_service_commands import dev_self_service_commands
 from app.engine.commands.financial_infra_commands import financial_infra_commands
 from app.engine.commands.plan_commands import plan_commands
 from app.engine.commands.sales_commands import sales_commands
@@ -24,6 +25,7 @@ dispatcher.register_handler(sdui_commands)
 dispatcher.register_handler(chat_infra_commands)
 dispatcher.register_handler(financial_infra_commands)
 dispatcher.register_handler(dev_commands)
+dispatcher.register_handler(dev_self_service_commands)
 
 # Serve static files from the 'frontend' directory
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
@@ -59,7 +61,7 @@ async def serve_index(request: Request):
     accept_header = request.headers.get("accept", "")
     if "text/html" in accept_header:
         return FileResponse("frontend/index.html")
-    
+
     # For curl, API clients, or JSON requests, provide a discovery guide
     return {
         "status": "online",
@@ -69,7 +71,10 @@ async def serve_index(request: Request):
             "available_commands": "/api/commands",
             "execution_endpoint": "/exec",
         },
-        "onboarding": "To get started, visit /api/guide to understand the Blueprint architecture and /api/commands to see all available operations."
+        "onboarding": (
+            "To get started, visit /api/guide to understand the Blueprint architecture "
+            "and /api/commands to see all available operations."
+        ),
     }
 
 
